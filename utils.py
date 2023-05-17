@@ -3,10 +3,12 @@ import datetime
 import errno
 import hashlib
 import os
+import numpy as np
+
 import time
 from collections import defaultdict, deque, OrderedDict
 from typing import List, Optional, Tuple
-
+import timm
 import torch
 import torch.distributed as dist
 
@@ -31,6 +33,8 @@ def check_tunable_params(model, verbose=True):
     print(
         f"trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param:.5f}"
     )
+
+    return trainable_params, all_param
 
 
 def tune_attention_layers_random(model, model_type='timm'):
@@ -82,12 +86,16 @@ def tune_attention_layers_random(model, model_type='timm'):
             except:
                 print('no patch embed')
 
+    #print("MASKING VECTOR: ", vector)
     return vector
 
 def tune_attention_layers(model):
+
+    vector = []
     
     for name_p,p in model.named_parameters():
         if '.attn.' in name_p or 'attention' in name_p:
+            vector.append(1)
             p.requires_grad = True
         else:
             p.requires_grad = False
@@ -110,17 +118,39 @@ def tune_attention_layers(model):
                 p.requires_grad = False
         except:
             print('no patch embed')
+
+    return vector
                 
 
 def tune_layernorm_layers(model):
 
     disable_grad(model)
 
+    vector = []
+
     for n,p in model.named_parameters():
         if("norm" in n or "head" in n):
+            vector.append(1)
             p.requires_grad = True
 
-    return model
+    return vector
+
+def tune_layernorm_random(model):
+
+    disable_grad(model)
+
+    vector = []
+
+    for n,p in model.named_parameters():
+
+        if(np.random.random(1)[0] >= 0.5):
+            vector.append(1)
+            p.requires_grad = True
+        else:
+            vector.append(0)
+
+    return vector
+
 
 def get_model_for_bitfit(model, model_type):
     trainable_components = ['bias'] 
@@ -143,12 +173,73 @@ def get_model_for_bitfit(model, model_type):
     for name, param in model.named_parameters():
         for component in trainable_components:
             if component in name:
-                x = random.randint(0,1)
-                if(x >= 0.5):
-                    param.requires_grad = True
-                else:
-                    continue
+                vector.append(1)
+                param.requires_grad = True
                 break
+    
+    return vector
+
+def get_model_bitfit_random(model):
+    trainable_components = ['bias'] 
+
+    # Disale all the gradients
+    for param in model.parameters():
+        param.requires_grad = False 
+    
+    #Add classification head to trainable components
+    if trainable_components:
+        trainable_components = trainable_components + ['pooler.dense.bias']
+        
+    if(model_type == 'timm'):
+        trainable_components = trainable_components + ['head']
+    elif(model_type == 'hf'):
+        trainable_components = trainable_components + ['classifier']
+
+    vector = []
+
+    for name, param in model.named_parameters():
+        for component in trainable_components:
+            if component in name:
+                if(np.random.random(1)[0] >= 0.5):
+                    vector.append(1)
+                    p.requires_grad = True
+                else:
+                    vector.append(0)
+
+    return vector
+
+def get_timm_model(encoder, **kwargs):
+    '''
+    Returns a timm model for a given encoder.
+    '''
+    if encoder == "vit_base":
+        model = timm.create_model("vit_base_patch16_224", pretrained=True, ) 
+    elif encoder == "vit_large":
+        model = timm.create_model("vit_large_patch16_224", pretrained=True, )
+    elif encoder == "vit_huge":
+        model = timm.create_model("vit_huge_patch14_224", pretrained=True, )
+
+    return model
+
+def get_masked_model(model, method):
+    if(method == 'fullft'):
+        pass
+    if(method == 'tune_attention'):
+        disable_grad(model)
+        vector = tune_attention_layers(model)
+    elif(method == 'tune_attention_random'):
+        disable_grad(model)
+        vector = tune_attention_layers_random(model)
+    elif(method == 'bitfit'):
+        vector = get_model_for_bitfit(model, 'timm')
+    elif(method == 'bitfit_random'):
+        vector = get_model_bitfit_random(model)
+    elif(method == 'tune_layernorm'):
+        vector = tune_layernorm_layers(model)
+    elif(method == 'tune_layernorm_random'):
+        vector = tune_layernorm_random(model)
+
+    return vector
 
 
 class SmoothedValue:

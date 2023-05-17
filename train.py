@@ -1,8 +1,11 @@
 import datetime
 import os
+import random
 import time
 import warnings
-
+import timm
+import pandas as pd
+import numpy as np
 import presets
 import torch
 import torch.utils.data
@@ -190,8 +193,24 @@ def load_data(traindir, valdir, args):
 
 
 def main(args):
+    
+    try:
+        vector_files = os.listdir(args.vector_savepath)
+        vector_files.sort(reverse=True)
+        vector_idx = int(vector_files[0].split('.')[0].split('_')[-1])
+    except:
+        vector_idx = 0
+
+    #Making directory for saving checkpoints
     if args.output_dir:
         utils.mkdir(args.output_dir)
+        utils.mkdir(os.path.join(args.output_dir, 'checkpoints'))
+        utils.mkdir(args.vector_savepath)
+
+    try:
+        results_df = pd.read_csv(os.path.join(args.output_dir, args.results_df))
+    except:
+        results_df = pd.DataFrame(columns=['Tuning Method','Train Percent','LR','Test Acc@1','Vector Path'])
 
     utils.init_distributed_mode(args)
     print(args)
@@ -234,7 +253,32 @@ def main(args):
     )
 
     print("Creating model")
-    model = torchvision.models.get_model(args.model, weights=args.weights, num_classes=num_classes)
+    # model = torchvision.models.get_model(args.model, weights=args.weights)
+    # linear_layer = nn.Linear(model.heads.head.in_features, num_classes)
+    # torch.nn.init.zeros_(linear_layer.weight)
+    # model.heads.head = linear_layer
+
+    model = utils.get_timm_model(args.model)
+
+    print("TUNING METHOD: ", args.tuning_method)
+    masking_vector = utils.get_masked_model(model, args.tuning_method)
+    print("MASKING VECTOR: ", masking_vector)
+
+    # Save the Masking Vector
+    vector_idx += 1
+    filename = args.tuning_method + '_' + 'vector_' + str(vector_idx) + '.npy'
+    with open(os.path.join(args.vector_savepath, filename), 'wb') as f:
+        np.save(f, np.array(masking_vector))
+
+    #Add Linear Layer
+    linear_layer = nn.Linear(model.head.in_features, num_classes)
+    torch.nn.init.zeros_(linear_layer.weight)
+    model.head = linear_layer
+
+    #Check Tunable Params
+    trainable_params, all_param = utils.check_tunable_params(model, True)
+    trainable_percentage = 100 * trainable_params / all_param
+    
     model.to(device)
 
     if args.distributed and args.sync_bn:
@@ -349,34 +393,47 @@ def main(args):
             evaluate(model, criterion, data_loader_test, device=device)
         return
 
-    print("Start training")
-    start_time = time.time()
-    for epoch in range(args.start_epoch, args.epochs):
-        if args.distributed:
-            train_sampler.set_epoch(epoch)
-        train_one_epoch(model, criterion, optimizer, data_loader, device, epoch, args, model_ema, scaler)
-        lr_scheduler.step()
-        evaluate(model, criterion, data_loader_test, device=device)
-        if model_ema:
-            evaluate(model_ema, criterion, data_loader_test, device=device, log_suffix="EMA")
-        if args.output_dir:
-            checkpoint = {
-                "model": model_without_ddp.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "lr_scheduler": lr_scheduler.state_dict(),
-                "epoch": epoch,
-                "args": args,
-            }
+    if(args.disable_training):
+        print("Training Process Skipped")
+    else:
+        print("Start training")
+        start_time = time.time()
+        for epoch in range(args.start_epoch, args.epochs):
+            if args.distributed:
+                train_sampler.set_epoch(epoch)
+            train_one_epoch(model, criterion, optimizer, data_loader, device, epoch, args, model_ema, scaler)
+            lr_scheduler.step()
+            test_acc = evaluate(model, criterion, data_loader_test, device=device)
             if model_ema:
-                checkpoint["model_ema"] = model_ema.state_dict()
-            if scaler:
-                checkpoint["scaler"] = scaler.state_dict()
-            utils.save_on_master(checkpoint, os.path.join(args.output_dir, f"model_{epoch}.pth"))
-            utils.save_on_master(checkpoint, os.path.join(args.output_dir, "checkpoint.pth"))
+                test_acc = evaluate(model_ema, criterion, data_loader_test, device=device, log_suffix="EMA")
+            if args.output_dir:
+                checkpoint = {
+                    "model": model_without_ddp.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "lr_scheduler": lr_scheduler.state_dict(),
+                    "epoch": epoch,
+                    "args": args,
+                }
+                if model_ema:
+                    checkpoint["model_ema"] = model_ema.state_dict()
+                if scaler:
+                    checkpoint["scaler"] = scaler.state_dict()
+                utils.save_on_master(checkpoint, os.path.join(args.output_dir, 'checkpoints', f"model_{epoch}.pth"))
+                utils.save_on_master(checkpoint, os.path.join(args.output_dir, 'checkpoints', "checkpoint.pth"))
 
-    total_time = time.time() - start_time
-    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-    print(f"Training time {total_time_str}")
+        total_time = time.time() - start_time
+        total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+        print(f"Training time {total_time_str}")
+
+        # Add all the information to the results_df
+    
+        new_row = [args.tuning_method, trainable_percentage, args.lr, test_acc, os.path.join(args.vector_savepath, filename)]
+        results_df.loc[len(results_df)] = new_row
+        results_df.to_csv(os.path.join(args.output_dir, args.results_df), index=False)
+
+        
+        print("Saving Masking Vector at: {}".format(args.vector_savepath))
+        print("Saving results df at: {}".format(os.path.join(args.output_dir, args.results_df)))
 
 
 def get_args_parser(add_help=True):
@@ -384,7 +441,7 @@ def get_args_parser(add_help=True):
 
     parser = argparse.ArgumentParser(description="PyTorch Classification Training", add_help=add_help)
 
-    parser.add_argument("--data-path", default="/raid/s2198939/RadImageNet_split", type=str, help="dataset path")
+    parser.add_argument("--data-path", default="/disk/scratch2/raman/ALL_DATASETS/HAM10000_dataset/", type=str, help="dataset path")
     parser.add_argument("--model", default="resnet18", type=str, help="model name")
     parser.add_argument("--device", default="cuda", type=str, help="device (Use cuda or cpu Default: cuda)")
     parser.add_argument(
@@ -506,11 +563,19 @@ def get_args_parser(add_help=True):
     parser.add_argument(
         "--ra-reps", default=3, type=int, help="number of repetitions for Repeated Augmentation (default: 3)"
     )
-    parser.add_argument("--weights", default=None, type=str, help="the weights enum name to load")
+    parser.add_argument("--weights", default='IMAGENET1K_V1', type=str, help="the weights enum name to load")
+    parser.add_argument("--tuning_method", default='fullft', type=str, help="Type of fine-tuning method to use")
+    parser.add_argument(
+                            "--disable_training",
+                            action="store_true",
+                            help="To disable/ skip the training process.",
+                        )
     return parser
 
 
 if __name__ == "__main__":
     args = get_args_parser().parse_args()
     args.output_dir = os.path.join(args.output_dir, args.model)
+    args.results_df = args.tuning_method + '_' + args.model + '.csv'
+    args.vector_savepath = os.path.join('saved_vectors', args.model, args.tuning_method)
     main(args)

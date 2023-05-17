@@ -1,0 +1,3 @@
+Tuning Method,LR,Test Acc@1,Vector Path
+tune_attention,0.03,67.93206793206794,saved_vectors/vit_base/tune_attention/tune_attention_vector_160.npy
+tune_attention,0.03,5.194805194805195,saved_vectors/vit_base/tune_attention/tune_attention_vector_161.npy

@@ -1,0 +1,3 @@
+Tuning Method,Train Percent,LR,Test Acc@1,Vector Path
+tune_attention_random,20.82543340413148,0.03,7.992007992007992,saved_vectors/vit_base/tune_attention_random/tune_attention_random_vector_1.npy
+tune_attention_random,11.883756427829697,0.03,5.094905094905095,saved_vectors/vit_base/tune_attention_random/tune_attention_random_vector_2.npy
