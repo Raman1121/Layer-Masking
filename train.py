@@ -1,6 +1,9 @@
-import datetime
 import os
+os.environ["TORCH_HOME"] = "/disk/scratch2/raman/"
+
+import datetime
 import random
+import re
 import time
 import warnings
 import timm
@@ -193,13 +196,17 @@ def load_data(traindir, valdir, args):
 
 
 def main(args):
+
+    files = os.listdir(args.vector_savepath)
+    files = [f for f in files if re.match(args.tuning_method + '_' + r'vector_\d+.npy', f)]
     
-    try:
-        vector_files = os.listdir(args.vector_savepath)
-        vector_files.sort(reverse=True)
-        vector_idx = int(vector_files[0].split('.')[0].split('_')[-1])
-    except:
+    if(len(files) > 0):
+        numbers = [int(re.search(r'\d+', f).group()) for f in files]
+        vector_idx = max(numbers) if numbers else None
+    else:
         vector_idx = 0
+
+    print(vector_idx, type(vector_idx))
 
     #Making directory for saving checkpoints
     if args.output_dir:
@@ -266,6 +273,7 @@ def main(args):
 
     # Save the Masking Vector
     vector_idx += 1
+    print("VECTOR INDEX: ", vector_idx)
     filename = args.tuning_method + '_' + 'vector_' + str(vector_idx) + '.npy'
     with open(os.path.join(args.vector_savepath, filename), 'wb') as f:
         np.save(f, np.array(masking_vector))
@@ -418,7 +426,7 @@ def main(args):
                     checkpoint["model_ema"] = model_ema.state_dict()
                 if scaler:
                     checkpoint["scaler"] = scaler.state_dict()
-                utils.save_on_master(checkpoint, os.path.join(args.output_dir, 'checkpoints', f"model_{epoch}.pth"))
+                #utils.save_on_master(checkpoint, os.path.join(args.output_dir, 'checkpoints', f"model_{epoch}.pth"))
                 utils.save_on_master(checkpoint, os.path.join(args.output_dir, 'checkpoints', "checkpoint.pth"))
 
         total_time = time.time() - start_time
@@ -426,13 +434,13 @@ def main(args):
         print(f"Training time {total_time_str}")
 
         # Add all the information to the results_df
-    
+        # 'Tuning Method','Train Percent','LR','Test Acc@1','Vector Path'
         new_row = [args.tuning_method, trainable_percentage, args.lr, test_acc, os.path.join(args.vector_savepath, filename)]
         results_df.loc[len(results_df)] = new_row
         results_df.to_csv(os.path.join(args.output_dir, args.results_df), index=False)
 
         
-        print("Saving Masking Vector at: {}".format(args.vector_savepath))
+        print("Saving Masking Vector at: {}".format(os.path.join(args.vector_savepath, filename)))
         print("Saving results df at: {}".format(os.path.join(args.output_dir, args.results_df)))
 
 
