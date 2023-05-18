@@ -197,6 +197,11 @@ def load_data(traindir, valdir, args):
 
 def main(args):
 
+    try:
+        os.mkdir(args.vector_savepath)
+    except:
+        print("Directory exists")
+
     files = os.listdir(args.vector_savepath)
     files = [f for f in files if re.match(args.tuning_method + '_' + r'vector_\d+.npy', f)]
     
@@ -212,7 +217,7 @@ def main(args):
     if args.output_dir:
         utils.mkdir(args.output_dir)
         utils.mkdir(os.path.join(args.output_dir, 'checkpoints'))
-        utils.mkdir(args.vector_savepath)
+        
 
     try:
         results_df = pd.read_csv(os.path.join(args.output_dir, args.results_df))

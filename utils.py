@@ -189,11 +189,8 @@ def get_model_bitfit_random(model):
     #Add classification head to trainable components
     if trainable_components:
         trainable_components = trainable_components + ['pooler.dense.bias']
-        
-    if(model_type == 'timm'):
-        trainable_components = trainable_components + ['head']
-    elif(model_type == 'hf'):
-        trainable_components = trainable_components + ['classifier']
+
+    trainable_components = trainable_components + ['head']
 
     vector = []
 
@@ -202,7 +199,7 @@ def get_model_bitfit_random(model):
             if component in name:
                 if(np.random.random(1)[0] >= 0.5):
                     vector.append(1)
-                    p.requires_grad = True
+                    param.requires_grad = True
                 else:
                     vector.append(0)
 
@@ -232,7 +229,7 @@ def get_masked_model(model, method):
         vector = tune_attention_layers_random(model)
     elif(method == 'bitfit'):
         vector = get_model_for_bitfit(model, 'timm')
-    elif(method == 'bitfit_random'):
+    elif(method == 'tune_bitfit_random'):
         vector = get_model_bitfit_random(model)
     elif(method == 'tune_layernorm'):
         vector = tune_layernorm_layers(model)
@@ -474,30 +471,33 @@ def save_on_master(*args, **kwargs):
 
 
 def init_distributed_mode(args):
-    if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
-        args.rank = int(os.environ["RANK"])
-        args.world_size = int(os.environ["WORLD_SIZE"])
-        args.gpu = int(os.environ["LOCAL_RANK"])
-    elif "SLURM_PROCID" in os.environ:
-        args.rank = int(os.environ["SLURM_PROCID"])
-        args.gpu = args.rank % torch.cuda.device_count()
-    elif hasattr(args, "rank"):
-        pass
-    else:
-        print("Not using distributed mode")
-        args.distributed = False
-        return
+    # if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
+    #     args.rank = int(os.environ["RANK"])
+    #     args.world_size = int(os.environ["WORLD_SIZE"])
+    #     args.gpu = int(os.environ["LOCAL_RANK"])
+    # elif "SLURM_PROCID" in os.environ:
+    #     args.rank = int(os.environ["SLURM_PROCID"])
+    #     args.gpu = args.rank % torch.cuda.device_count()
+    # elif hasattr(args, "rank"):
+    #     pass
+    # else:
+    #     print("Not using distributed mode")
+    #     args.distributed = False
+    #     return
 
-    args.distributed = True
+    # args.distributed = True
 
-    torch.cuda.set_device(args.gpu)
-    args.dist_backend = "nccl"
-    print(f"| distributed init (rank {args.rank}): {args.dist_url}", flush=True)
-    torch.distributed.init_process_group(
-        backend=args.dist_backend, init_method=args.dist_url, world_size=args.world_size, rank=args.rank
-    )
-    torch.distributed.barrier()
-    setup_for_distributed(args.rank == 0)
+    # torch.cuda.set_device(args.gpu)
+    # args.dist_backend = "nccl"
+    # print(f"| distributed init (rank {args.rank}): {args.dist_url}", flush=True)
+    # torch.distributed.init_process_group(
+    #     backend=args.dist_backend, init_method=args.dist_url, world_size=args.world_size, rank=args.rank
+    # )
+    # torch.distributed.barrier()
+    # setup_for_distributed(args.rank == 0)
+
+    args.distributed = False
+    return
 
 
 def average_checkpoints(inputs):
