@@ -142,12 +142,12 @@ def tune_layernorm_random(model):
     vector = []
 
     for n,p in model.named_parameters():
-
-        if(np.random.random(1)[0] >= 0.5):
-            vector.append(1)
-            p.requires_grad = True
-        else:
-            vector.append(0)
+        if("norm" in n or "head" in n):
+            if(np.random.random(1)[0] >= 0.5):
+                vector.append(1)
+                p.requires_grad = True
+            else:
+                vector.append(0)
 
     return vector
 
