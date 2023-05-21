@@ -432,7 +432,7 @@ def main(args):
                 if scaler:
                     checkpoint["scaler"] = scaler.state_dict()
                 #utils.save_on_master(checkpoint, os.path.join(args.output_dir, 'checkpoints', f"model_{epoch}.pth"))
-                utils.save_on_master(checkpoint, os.path.join(args.output_dir, 'checkpoints', "checkpoint.pth"))
+                utils.save_on_master(checkpoint, os.path.join(args.output_dir, 'checkpoints', "checkpoint_" + args.tuning_method + ".pth"))
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))

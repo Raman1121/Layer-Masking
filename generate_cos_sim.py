@@ -11,6 +11,7 @@ def get_args_parser():
 
     parser.add_argument("--tuning_method", default=None)
     parser.add_argument("--model", default='vit_base')
+    parser.add_argument("--top_k", default=None, type=int)
 
     return parser
 
@@ -20,6 +21,10 @@ args = get_args_parser().parse_args()
 base_path = '/disk/scratch2/raman/Layer-Masking/'
 csv_path = os.path.join(base_path, args.model, args.tuning_method + '_' + args.model + '.csv')
 df = pd.read_csv(csv_path)
+
+if(args.top_k):
+    df = df.sort_values(by=['Test Acc@1'], ascending=False).head(args.top_k)
+    
 
 # Load the numpy vectors
 vectors = []
@@ -43,6 +48,8 @@ for i in range(num_vectors):
 # Create a DataFrame with the similarity results
 similarity_df = pd.DataFrame(similarity_matrix)
 
+print(similarity_df)
+
 # Create a confusion matrix using seaborn and save it as a figure
 plt.figure(figsize=(10, 10))
 
@@ -50,4 +57,7 @@ sns.heatmap(similarity_df, annot=True, fmt='.2f', cmap='coolwarm')
 plt.xlabel("Vectors")
 plt.ylabel("Vectors")
 plt.title("Cosine Similarity between different randomly generated vectors for {} method".format(args.tuning_method))
-plt.savefig('cosine_similarity_cm_{}.png'.format(args.tuning_method))
+if(args.top_k):
+    plt.savefig('cosine_similarity_cm_{}_top_{}.png'.format(args.tuning_method, args.top_k))    
+else:
+    plt.savefig('cosine_similarity_cm_{}.png'.format(args.tuning_method))   

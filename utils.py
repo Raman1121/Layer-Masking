@@ -12,9 +12,13 @@ import timm
 import torch
 import torch.distributed as dist
 
-def disable_grad(module):
+def disable_module(module):
     for p in module.parameters():
         p.requires_grad = False
+        
+def enable_module(module):
+    for p in module.parameters():
+        p.requires_grad = True
 
 
 def check_tunable_params(model, verbose=True):
@@ -89,6 +93,32 @@ def tune_attention_layers_random(model, model_type='timm'):
     #print("MASKING VECTOR: ", vector)
     return vector
 
+
+def tune_blocks_random(model, segment):
+    vector = []
+
+    for idx, block in enumerate(model.blocks):
+        if(np.random.random(1)[0] >= 0.5):
+            print("Enabling {} in Block {}".format(segment, idx))
+            if(segment == 'attention'):
+                enable_module(block.attn)
+            elif(segment == 'layernorm'):
+                enable_module(block.norm1)
+                enable_module(block.norm2)
+
+            vector.append(1)
+        else:
+            print("Disabling {} in Block {}".format(segment, idx))
+            if(segment == 'attention'):
+                disable_module(block.attn)
+            elif(segment == 'layernorm'):
+                disable_module(block.norm1)
+                disable_module(block.norm2)
+            
+            vector.append(0)
+            
+    return vector
+
 def tune_attention_layers(model):
 
     vector = []
@@ -124,7 +154,7 @@ def tune_attention_layers(model):
 
 def tune_layernorm_layers(model):
 
-    disable_grad(model)
+    disable_module(model)
 
     vector = []
 
@@ -137,7 +167,7 @@ def tune_layernorm_layers(model):
 
 def tune_layernorm_random(model):
 
-    disable_grad(model)
+    disable_module(model)
 
     vector = []
 
@@ -222,19 +252,29 @@ def get_masked_model(model, method):
     if(method == 'fullft'):
         pass
     if(method == 'tune_attention'):
-        disable_grad(model)
+        disable_module(model)
         vector = tune_attention_layers(model)
     elif(method == 'tune_attention_random'):
-        disable_grad(model)
+        disable_module(model)
         vector = tune_attention_layers_random(model)
+    elif(method == 'tune_attention_blocks_random'):
+        disable_module(model)
+        vector = tune_blocks_random(model, segment='attention')
     elif(method == 'bitfit'):
         vector = get_model_for_bitfit(model, 'timm')
     elif(method == 'tune_bitfit_random'):
         vector = get_model_bitfit_random(model)
     elif(method == 'tune_layernorm'):
+        disable_module(model)
         vector = tune_layernorm_layers(model)
     elif(method == 'tune_layernorm_random'):
+        disable_module(model)
         vector = tune_layernorm_random(model)
+    elif(method == 'tune_layernorm_blocks_random'):
+        disable_module(model)
+        vector = tune_blocks_random(model, segment='layernorm')
+    else:
+        raise NotImplementedError
 
     return vector
 
