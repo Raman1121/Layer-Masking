@@ -1,16 +1,25 @@
+import os
+os.environ["TORCH_HOME"] = "/disk/scratch2/raman/"
+
 import copy
 import datetime
 import errno
 import hashlib
-import os
 import numpy as np
 
 import time
 from collections import defaultdict, deque, OrderedDict
 from typing import List, Optional, Tuple
 import timm
+import torch.nn as nn
 import torch
+import torch.nn.functional as F
 import torch.distributed as dist
+
+
+
+###################### HELPER FUNCTIONS #######################
+
 
 def disable_module(module):
     for p in module.parameters():
@@ -39,6 +48,21 @@ def check_tunable_params(model, verbose=True):
     )
 
     return trainable_params, all_param
+
+def enable_from_vector(vector, model):
+
+    print("Vector: ", vector)
+    
+    disable_module(model)
+    
+    for idx, block in enumerate(model.blocks): 
+    
+        if(vector[idx] == 1):
+            print("Enabling attention in Block {}".format(idx))
+            enable_module(block.attn)
+        else:
+            #print("Disabling attention in Block {}".format(idx))
+            disable_module(block.attn)
 
 
 def tune_attention_layers_random(model, model_type='timm'):
@@ -277,6 +301,40 @@ def get_masked_model(model, method):
         raise NotImplementedError
 
     return vector
+
+def get_model_from_vector(model, method, vector):
+    if(method == 'tune_attention_blocks_random'):
+        disable_module(model)
+        enable_from_vector(vector, model)
+
+
+# Calibration error scores in the form of loss metrics
+class ECELoss(nn.Module):
+    '''
+    Compute ECE (Expected Calibration Error)
+    '''
+    def __init__(self, n_bins=15):
+        super(ECELoss, self).__init__()
+        bin_boundaries = torch.linspace(0, 1, n_bins + 1)
+        self.bin_lowers = bin_boundaries[:-1]
+        self.bin_uppers = bin_boundaries[1:]
+
+    def forward(self, logits, labels):
+        softmaxes = F.softmax(logits, dim=1)
+        confidences, predictions = torch.max(softmaxes, 1)
+        accuracies = predictions.eq(labels)
+
+        ece = torch.zeros(1, device=logits.device)
+        for bin_lower, bin_upper in zip(self.bin_lowers, self.bin_uppers):
+            # Calculated |confidence - accuracy| in each bin
+            in_bin = confidences.gt(bin_lower.item()) * confidences.le(bin_upper.item())
+            prop_in_bin = in_bin.float().mean()
+            if prop_in_bin.item() > 0:
+                accuracy_in_bin = accuracies[in_bin].float().mean()
+                avg_confidence_in_bin = confidences[in_bin].mean()
+                ece += torch.abs(avg_confidence_in_bin - accuracy_in_bin) * prop_in_bin
+
+        return ece
 
 
 class SmoothedValue:
