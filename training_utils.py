@@ -132,7 +132,9 @@ def load_data(traindir, valdir, args):
 
     print("Loading training data")
     st = time.time()
-    cache_path = _get_cache_path(traindir)
+
+    if(args.dataset != 'CIFAR10' and args.dataset != 'CIFAR100'):
+        cache_path = _get_cache_path(traindir)
     if args.cache_dataset and os.path.exists(cache_path):
         # Attention, as the transforms are also cached!
         print(f"Loading dataset_train from {cache_path}")
@@ -150,18 +152,39 @@ def load_data(traindir, valdir, args):
         print("random_erase_prob: ", random_erase_prob)
         print("ra_magnitude: ", ra_magnitude)
         print("augmix_severity: ", augmix_severity)
+
+        transform = presets.ClassificationPresetTrain(
+                    crop_size=train_crop_size,
+                    interpolation=interpolation,
+                    auto_augment_policy=auto_augment_policy,
+                    random_erase_prob=random_erase_prob,
+                    ra_magnitude=ra_magnitude,
+                    augmix_severity=augmix_severity,
+                )
         
-        dataset = torchvision.datasets.ImageFolder(
-            traindir,
-            presets.ClassificationPresetTrain(
-                crop_size=train_crop_size,
-                interpolation=interpolation,
-                auto_augment_policy=auto_augment_policy,
-                random_erase_prob=random_erase_prob,
-                ra_magnitude=ra_magnitude,
-                augmix_severity=augmix_severity,
-            ),
-        )
+        if(args.dataset == 'CIFAR10'):
+            dataset = torchvision.datasets.CIFAR10(root=args.dataset_basepath, train=True,
+                                        download=True, transform=transform)
+        elif(args.dataset == 'CIFAR100'):
+            dataset = torchvision.datasets.CIFAR100(root=args.dataset_basepath, train=True,
+                                        download=True, transform=transform)
+        else:
+            # dataset = torchvision.datasets.ImageFolder(
+            #     traindir,
+            #     presets.ClassificationPresetTrain(
+            #         crop_size=train_crop_size,
+            #         interpolation=interpolation,
+            #         auto_augment_policy=auto_augment_policy,
+            #         random_erase_prob=random_erase_prob,
+            #         ra_magnitude=ra_magnitude,
+            #         augmix_severity=augmix_severity,
+            #     ),
+            # )
+
+            dataset = torchvision.datasets.ImageFolder(
+                traindir,
+                transform,
+            )
         if args.cache_dataset:
             print(f"Saving dataset_train to {cache_path}")
             utils.mkdir(os.path.dirname(cache_path))
@@ -169,7 +192,8 @@ def load_data(traindir, valdir, args):
     print("Took", time.time() - st)
 
     print("Loading validation data")
-    cache_path = _get_cache_path(valdir)
+    if(args.dataset != 'CIFAR10' and args.dataset != 'CIFAR100'):
+        cache_path = _get_cache_path(valdir)
     if args.cache_dataset and os.path.exists(cache_path):
         # Attention, as the transforms are also cached!
         print(f"Loading dataset_test from {cache_path}")
@@ -182,11 +206,17 @@ def load_data(traindir, valdir, args):
             preprocessing = presets.ClassificationPresetEval(
                 crop_size=val_crop_size, resize_size=val_resize_size, interpolation=interpolation
             )
-
-        dataset_test = torchvision.datasets.ImageFolder(
-            valdir,
-            preprocessing,
-        )
+        if(args.dataset == 'CIFAR10'):
+            dataset_test = torchvision.datasets.CIFAR10(root=args.dataset_basepath, train=False,
+                                       download=True, transform=preprocessing)
+        elif(args.dataset == 'CIFAR100'):
+            dataset_test = torchvision.datasets.CIFAR100(root=args.dataset_basepath, train=False,
+                                       download=True, transform=preprocessing)
+        else:
+            dataset_test = torchvision.datasets.ImageFolder(
+                valdir,
+                preprocessing,
+            )
         if args.cache_dataset:
             print(f"Saving dataset_test to {cache_path}")
             utils.mkdir(os.path.dirname(cache_path))
@@ -284,3 +314,30 @@ def get_model_ema(model_without_ddp, args):
         model_ema = utils.ExponentialMovingAverage(model_without_ddp, device=device, decay=1.0 - alpha)
 
     return model_ema
+
+def get_data(args):
+
+    if(args.dataset == 'CIFAR10' or args.dataset == 'CIFAR100'):
+        train_dir = None
+        val_dir = None
+    else:
+        if(args.dataset == 'HAM10000'):
+            path = os.path.join(args.dataset_basepath, "HAM10000_dataset/")
+        elif(args.dataset == 'fitzpatrick'):
+            path = os.path.join(args.dataset_basepath, "Fitzpatrick/")
+        elif(args.dataset == 'breastUS'):
+            path = os.path.join(args.dataset_basepath, "Breast_US_dataset_split/")
+        elif(args.dataset == 'retinopathy'):
+            path = os.path.join(args.dataset_basepath, "Retinopathy/")
+        elif(args.dataset == 'pneumonia'):
+            path = os.path.join(args.dataset_basepath, "Pneumonia_Detection/")
+        elif(args.dataset == 'smdg'):
+            path = os.path.join(args.dataset_basepath, "SMDG/")
+
+        train_dir = os.path.join(path, "train")
+        val_dir = os.path.join(path, "val")
+
+    dataset, dataset_test, train_sampler, test_sampler = load_data(train_dir, val_dir, args)
+
+    return dataset, dataset_test, train_sampler, test_sampler
+    

@@ -5,7 +5,9 @@ def get_args_parser(add_help=True):
 
     parser = argparse.ArgumentParser(description="PyTorch Classification Training", add_help=add_help)
 
-    parser.add_argument("--data-path", default="/disk/scratch2/raman/ALL_DATASETS/HAM10000_dataset/", type=str, help="dataset path")
+    #parser.add_argument("--data-path", default="/disk/scratch2/raman/ALL_DATASETS/HAM10000_dataset/", type=str, help="dataset path")
+    parser.add_argument("--dataset", default=None, required=True, type=str, help="Dataset for finetuning.")
+    parser.add_argument("--dataset_basepath", default="/disk/scratch2/raman/ALL_DATASETS/", required=False, type=str, help="Base path for all the datasets.")
     parser.add_argument("--model", default="resnet18", type=str, help="model name")
     parser.add_argument("--device", default="cuda", type=str, help="device (Use cuda or cpu Default: cuda)")
     parser.add_argument(
@@ -137,8 +139,7 @@ def get_args_parser(add_help=True):
 
     parser.add_argument(
         "--masking_vector",
-        nargs="*",
-        type=int,
+        type=str,
         default=None
     )
 

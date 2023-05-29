@@ -26,7 +26,7 @@ from torchvision.transforms.functional import InterpolationMode
 def main(args):
 
     try:
-        os.mkdir(args.vector_savepath)
+        os.makedirs(args.vector_savepath)
     except:
         print("Directory exists")
 
@@ -63,10 +63,15 @@ def main(args):
     else:
         torch.backends.cudnn.benchmark = True
 
-    train_dir = os.path.join(args.data_path, "train")
-    val_dir = os.path.join(args.data_path, "val")
-    dataset, dataset_test, train_sampler, test_sampler = load_data(train_dir, val_dir, args)
+    #train_dir = os.path.join(args.data_path, "train")
+    #train_dir = os.path.join(utils.get_data_path(args), "train")
+
+    #val_dir = os.path.join(args.data_path, "val")
+    #val_dir = os.path.join(utils.get_data_path(args), "val")
+
+    dataset, dataset_test, train_sampler, test_sampler = get_data(args)
     args.num_classes = len(dataset.classes)
+    print("Size of training dataset: ", len(dataset))
 
     collate_fn = None
     mixup_transforms = get_mixup_transforms(args)
@@ -230,7 +235,14 @@ def main(args):
 
 if __name__ == "__main__":
     args = get_args_parser().parse_args()
-    args.output_dir = os.path.join(args.output_dir, args.model)
-    args.results_df = args.tuning_method + '_' + args.model + '.csv'
-    args.vector_savepath = os.path.join('saved_vectors', args.model, args.tuning_method)
+    #args.output_dir = os.path.join(args.output_dir, args.model)
+    #args.output_dir = os.path.join(os.getcwd(), args.model)
+    args.output_dir = os.path.join(os.getcwd(), args.model, args.dataset)
+    args.results_df = args.tuning_method + '_' + args.model + '_' + str(args.lr) + '.csv'
+    #args.vector_savepath = os.path.join('../saved_vectors', args.model, args.tuning_method+'_' + str(args.lr))
+
+    current_wd = os.getcwd()
+    args.vector_savepath = os.path.join(current_wd, 'saved_vectors', args.model, args.dataset, args.tuning_method + '_' + str(args.lr))
+
+    print(args.output_dir)
     main(args)

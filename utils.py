@@ -300,6 +300,8 @@ def get_masked_model(model, method):
     else:
         raise NotImplementedError
 
+    #enable_module(model.head)
+
     return vector
 
 def get_model_from_vector(model, method, vector):
