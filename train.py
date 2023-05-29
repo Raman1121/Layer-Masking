@@ -31,6 +31,8 @@ def main(args):
     except:
         print("Directory exists")
 
+    os.makedirs(args.fig_savepath, exist_ok=True)
+
     files = os.listdir(args.vector_savepath)
     files = [f for f in files if re.match(args.tuning_method + '_' + r'vector_\d+.npy', f)]
     
@@ -72,6 +74,7 @@ def main(args):
 
     dataset, dataset_test, train_sampler, test_sampler = get_data(args)
     args.num_classes = len(dataset.classes)
+    print("DATASET: ", args.dataset)
     print("Size of training dataset: ", len(dataset))
     print("Number of classes: ", args.num_classes)
 
@@ -103,6 +106,7 @@ def main(args):
     # model.heads.head = linear_layer
 
     model = utils.get_timm_model(args.model, num_classes=args.num_classes)
+    base_model = model
 
     print("TUNING METHOD: ", args.tuning_method)
 
@@ -216,18 +220,22 @@ def main(args):
                     checkpoint["model_ema"] = model_ema.state_dict()
                 if scaler:
                     checkpoint["scaler"] = scaler.state_dict()
-                #utils.save_on_master(checkpoint, os.path.join(args.output_dir, 'checkpoints', f"model_{epoch}.pth"))
-                utils.save_on_master(checkpoint, os.path.join(args.output_dir, 'checkpoints', "checkpoint_" + args.tuning_method + ".pth"))
+                #utils.save_on_master(checkpoint, os.path.join(args.output_dir, 'checkpoints', f"model_{epoch}.pth"))7
+                ckpt_path = os.path.join(args.output_dir, 'checkpoints', "checkpoint_" + args.tuning_method + ".pth")
+                utils.save_on_master(checkpoint, ckpt_path)
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-        print(f"Training time {total_time_str}")
+        print("Training time {}".format(total_time_str))
+        #print(f"Training time {total_time_str}")
 
         # Add all the information to the results_df
         # 'Tuning Method','Train Percent','LR','Test Acc@1','Vector Path'
         new_row = [args.tuning_method, trainable_percentage, args.lr, test_acc, os.path.join(args.vector_savepath, filename)]
         results_df.loc[len(results_df)] = new_row
         results_df.to_csv(os.path.join(args.output_dir, args.results_df), index=False)
+
+        plot_changes(ckpt_path, base_model, args)
 
         if(args.tuning_method != 'fullft'):
             print("Saving Masking Vector at: {}".format(os.path.join(args.vector_savepath, filename)))
@@ -244,6 +252,6 @@ if __name__ == "__main__":
 
     current_wd = os.getcwd()
     args.vector_savepath = os.path.join(current_wd, 'saved_vectors', args.model, args.dataset, args.tuning_method + '_' + str(args.lr))
-
+    args.fig_savepath = os.path.join(args.output_dir, 'plots/')
     print(args.output_dir)
     main(args)

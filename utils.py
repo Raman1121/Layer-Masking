@@ -3,6 +3,7 @@ os.environ["TORCH_HOME"] = os.path.dirname(os.getcwd())
 
 import copy
 import datetime
+import re
 import errno
 import hashlib
 import numpy as np
@@ -16,6 +17,8 @@ import torch
 import torch.nn.functional as F
 import torch.distributed as dist
 
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 ###################### HELPER FUNCTIONS #######################
@@ -311,6 +314,73 @@ def get_model_from_vector(model, method, vector):
         disable_module(model)
         enable_from_vector(vector, model)
 
+
+def plot_changes(fine_tuned_ckpt, base_model, args):
+    '''
+    Plots the changes in different layers of a model
+    '''
+
+    if(args.model == 'vit_base'):
+        num_layers = 12
+    if(args.model == 'vit_large'):
+        num_layers = 24
+    if(args.model == 'vit_huge'):
+        num_layers = 32
+
+    fine_tuned_model = get_timm_model(args.model, args.num_classes)
+    ckpt = torch.load(fine_tuned_ckpt)
+    fine_tuned_model.load_state_dict(ckpt["model"], strict=True)
+    fine_tuned_model = fine_tuned_model.cpu()
+
+    def _calc_mean_diff(ft_p, base_p):
+        return np.mean(np.abs(np.array(ft_p.data - base_p.data)))
+
+    def _get_component_name(name):
+        return re.split(r'.[0-9]+.', name)[1]
+
+    def _get_component_layer(name):
+        return int(name.split('.')[1])
+
+    base_model = base_model.cpu()
+    #fine_tuned_model = base_model.cpu()
+    print(fine_tuned_ckpt)
+
+    changes = []
+    for ft_name, ft_param in fine_tuned_model.named_parameters():
+        if ft_param.requires_grad and ('.attn.' in ft_name or 'attention' in ft_name):
+            for base_name, base_param in base_model.named_parameters():
+                if ft_name == base_name:
+                    changes.append({'name': ft_name, 'value': _calc_mean_diff(ft_param, base_param)})
+
+    keys = list(set(_get_component_name(c['name']) for c in changes))
+    keys_mapper = {k: i for i, k in enumerate(keys)}
+
+    total_weights = np.zeros(len(keys))
+    for change in changes:
+        total_weights[keys_mapper[_get_component_name(change['name'])]] += change['value']
+
+    keys = [keys[i] for i in np.argsort(-total_weights)]
+    keys_mapper = {k: i for i, k in enumerate(keys)}
+
+    avg_column = np.zeros(len(keys))
+    values_map = np.zeros((len(keys), num_layers + 1))
+    for change in changes:
+        avg_column[keys_mapper[_get_component_name(change['name'])]] += change['value']
+        values_map[keys_mapper[_get_component_name(change['name'])], _get_component_layer(change['name'])] = change[
+            'value']
+    avg_column /= num_layers
+    values_map[:, -1] = avg_column
+
+    print(values_map)
+
+    fig, ax = plt.subplots(figsize=(num_layers, len(keys)))
+    xticklabels = [f'Layer {i}' for i in range(num_layers)]
+    xticklabels.append('Avg.')
+    yticklabels = keys
+    sns.heatmap(values_map, cmap="Blues", ax=ax, xticklabels=xticklabels, yticklabels=yticklabels)
+
+    filename = args.dataset + '_' + args.tuning_method + '_' + str(vector_idx)
+    plt.savefig(os.path.join(args.fig_savepath, filename + '.png'))
 
 # Calibration error scores in the form of loss metrics
 class ECELoss(nn.Module):
