@@ -259,16 +259,18 @@ def get_model_bitfit_random(model):
 
     return vector
 
-def get_timm_model(encoder, **kwargs):
+def get_timm_model(encoder, num_classes, **kwargs):
     '''
     Returns a timm model for a given encoder.
     '''
+
+    assert num_classes is not None, "Number of classes cannot be None"
     if encoder == "vit_base":
-        model = timm.create_model("vit_base_patch16_224", pretrained=True, ) 
+        model = timm.create_model("vit_base_patch16_224", pretrained=True, num_classes=num_classes) 
     elif encoder == "vit_large":
-        model = timm.create_model("vit_large_patch16_224", pretrained=True, )
+        model = timm.create_model("vit_large_patch16_224", pretrained=True, num_classes=num_classes)
     elif encoder == "vit_huge":
-        model = timm.create_model("vit_huge_patch14_224", pretrained=True, )
+        model = timm.create_model("vit_huge_patch14_224", pretrained=True, num_classes=num_classes)
 
     return model
 
@@ -300,7 +302,7 @@ def get_masked_model(model, method):
     else:
         raise NotImplementedError
 
-    #enable_module(model.head)
+    enable_module(model.head)
 
     return vector
 

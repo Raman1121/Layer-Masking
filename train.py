@@ -72,6 +72,7 @@ def main(args):
     dataset, dataset_test, train_sampler, test_sampler = get_data(args)
     args.num_classes = len(dataset.classes)
     print("Size of training dataset: ", len(dataset))
+    print("Number of classes: ", args.num_classes)
 
     collate_fn = None
     mixup_transforms = get_mixup_transforms(args)
@@ -100,8 +101,7 @@ def main(args):
     # torch.nn.init.zeros_(linear_layer.weight)
     # model.heads.head = linear_layer
 
-    model = utils.get_timm_model(args.model)
-    #print(args.masking_vector, type(args.masking_vector))
+    model = utils.get_timm_model(args.model, num_classes=args.num_classes)
 
     print("TUNING METHOD: ", args.tuning_method)
 
