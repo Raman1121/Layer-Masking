@@ -1,5 +1,6 @@
 import os
-os.environ["TORCH_HOME"] = "/disk/scratch2/raman/"
+#os.environ["TORCH_HOME"] = "/disk/scratch2/raman/"
+os.environ["TORCH_HOME"] = os.path.dirname(os.getcwd())
 
 import datetime
 import random
