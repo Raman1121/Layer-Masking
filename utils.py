@@ -268,8 +268,11 @@ def get_timm_model(encoder, num_classes, **kwargs):
     '''
 
     assert num_classes is not None, "Number of classes cannot be None"
+    
     if encoder == "vit_base":
         model = timm.create_model("vit_base_patch16_224", pretrained=True, num_classes=num_classes) 
+    elif encoder == 'vit_base_ssl':
+        model = timm.create_model("vit_base_patch16_224_dino", pretrained=True, num_classes=num_classes)
     elif encoder == "vit_large":
         model = timm.create_model("vit_large_patch16_224", pretrained=True, num_classes=num_classes)
     elif encoder == "vit_huge":
