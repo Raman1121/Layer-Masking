@@ -7,7 +7,7 @@ def get_args_parser(add_help=True):
 
     #parser.add_argument("--data-path", default="/disk/scratch2/raman/ALL_DATASETS/HAM10000_dataset/", type=str, help="dataset path")
     parser.add_argument("--dataset", default=None, required=True, type=str, help="Dataset for finetuning.")
-    parser.add_argument("--dataset_basepath", default="/disk/scratch2/raman/ALL_DATASETS/", required=False, type=str, help="Base path for all the datasets.")
+    parser.add_argument("--dataset_basepath", default="/home/co-dutt1/rds/hpc-work/ALL_DATASETS/", required=False, type=str, help="Base path for all the datasets.")
     #parser.add_argument("--fig_savepath", required=True, type=str, help="Base path for saving figures.")
     parser.add_argument("--model", default="resnet18", type=str, help="model name")
     parser.add_argument("--device", default="cuda", type=str, help="device (Use cuda or cpu Default: cuda)")
@@ -139,9 +139,14 @@ def get_args_parser(add_help=True):
                         )
 
     parser.add_argument(
-        "--masking_vector",
-        type=str,
+        "--masking_vector_idx",
+        type=int,
         default=None
+    )
+    parser.add_argument(
+        "--exp_vector_path",
+        type=str,
+        default="/home/co-dutt1/rds/hpc-work/Layer-Masking/Experiment_Vectors/"
     )
 
     return parser

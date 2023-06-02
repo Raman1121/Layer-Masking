@@ -26,34 +26,46 @@ from torchvision.transforms.functional import InterpolationMode
 
 def main(args):
 
-    try:
-        os.makedirs(args.vector_savepath)
-    except:
-        print("Directory exists")
+    if(args.save_flag):
+        try:
+            os.makedirs(args.vector_savepath)
+        except:
+            print("Directory exists")
 
     os.makedirs(args.fig_savepath, exist_ok=True)
+    masking_idx = args.masking_vector_idx
+    print("Masking Index: ", masking_idx)
 
-    files = os.listdir(args.vector_savepath)
-    files = [f for f in files if re.match(args.tuning_method + '_' + r'vector_\d+.npy', f)]
-    
-    if(len(files) > 0):
-        numbers = [int(re.search(r'\d+', f).group()) for f in files]
-        vector_idx = max(numbers) if numbers else None
+    if(masking_idx is not None):
+        mask_filename = os.path.join(args.exp_vector_path, 'random_vector_' + str(masking_idx) + '.npy')
+        mask = np.load(mask_filename)
+        print(mask)
     else:
-        vector_idx = 0
+        mask=None
 
-    print(vector_idx, type(vector_idx))
+    #if(args.masking_vector_idx is None):
+    if(args.save_flag):
+        files = os.listdir(args.vector_savepath)
+        files = [f for f in files if re.match(args.tuning_method + '_' + r'vector_\d+.npy', f)]
+    
+        if(len(files) > 0):
+            numbers = [int(re.search(r'\d+', f).group()) for f in files]
+            vector_idx = max(numbers) if numbers else None
+        else:
+            vector_idx = 0
+
+        print(vector_idx, type(vector_idx))
 
     #Making directory for saving checkpoints
     if args.output_dir:
         utils.mkdir(args.output_dir)
         utils.mkdir(os.path.join(args.output_dir, 'checkpoints'))
-        
-
+    
     try:
         results_df = pd.read_csv(os.path.join(args.output_dir, args.results_df))
     except:
         results_df = pd.DataFrame(columns=['Tuning Method','Train Percent','LR','Test Acc@1','Vector Path'])
+
 
     utils.init_distributed_mode(args)
     print(args)
@@ -65,12 +77,6 @@ def main(args):
         torch.use_deterministic_algorithms(True)
     else:
         torch.backends.cudnn.benchmark = True
-
-    #train_dir = os.path.join(args.data_path, "train")
-    #train_dir = os.path.join(utils.get_data_path(args), "train")
-
-    #val_dir = os.path.join(args.data_path, "val")
-    #val_dir = os.path.join(utils.get_data_path(args), "val")
 
     dataset, dataset_test, train_sampler, test_sampler = get_data(args)
     args.num_classes = len(dataset.classes)
@@ -100,10 +106,6 @@ def main(args):
     )
 
     print("Creating model")
-    # model = torchvision.models.get_model(args.model, weights=args.weights)
-    # linear_layer = nn.Linear(model.heads.head.in_features, num_classes)
-    # torch.nn.init.zeros_(linear_layer.weight)
-    # model.heads.head = linear_layer
 
     model = utils.get_timm_model(args.model, num_classes=args.num_classes)
     base_model = model
@@ -112,24 +114,26 @@ def main(args):
 
     if(args.tuning_method != 'fullft'):
 
-        masking_vector = utils.get_masked_model(model, args.tuning_method)
+        masking_vector = utils.get_masked_model(model, args.tuning_method, mask=list(mask))
         print("MASKING VECTOR: ", masking_vector)
 
 
     # Save the Masking Vector
-    vector_idx += 1
-    print("VECTOR INDEX: ", vector_idx)
-    filename = args.tuning_method + '_' + 'vector_' + str(vector_idx) + '.npy'
+    #if(args.masking_vector_idx is None):
+    if(args.save_flag):
+        vector_idx += 1
+        print("VECTOR INDEX: ", vector_idx)
+        filename = args.tuning_method + '_' + 'vector_' + str(vector_idx) + '.npy'
 
-    if(args.tuning_method != 'fullft'):
-        
-        with open(os.path.join(args.vector_savepath, filename), 'wb') as f:
-            np.save(f, np.array(masking_vector))
+        if(args.tuning_method != 'fullft'):
+            
+            with open(os.path.join(args.vector_savepath, filename), 'wb') as f:
+                np.save(f, np.array(masking_vector))
 
     #Add Linear Layer
-    linear_layer = nn.Linear(model.head.in_features, args.num_classes)
-    torch.nn.init.zeros_(linear_layer.weight)
-    model.head = linear_layer
+    # linear_layer = nn.Linear(model.head.in_features, args.num_classes)
+    # torch.nn.init.zeros_(linear_layer.weight)
+    # model.head = linear_layer
 
     #Check Tunable Params
     trainable_params, all_param = utils.check_tunable_params(model, True)
@@ -190,9 +194,9 @@ def main(args):
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
         if model_ema:
-            evaluate(model_ema, criterion, ece_criterion, data_loader_test, device=device, log_suffix="EMA")
+            evaluate(model_ema, criterion, ece_criterion, data_loader_test, args=args, device=device, log_suffix="EMA")
         else:
-            evaluate(model, criterion, ece_criterion, data_loader_test, device=device)
+            evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
         return
 
     if(args.disable_training):
@@ -205,9 +209,9 @@ def main(args):
                 train_sampler.set_epoch(epoch)
             train_one_epoch(model, criterion, ece_criterion, optimizer, data_loader, device, epoch, args, model_ema, scaler)
             lr_scheduler.step()
-            test_acc = evaluate(model, criterion, ece_criterion, data_loader_test, device=device)
+            test_acc = evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
             if model_ema:
-                test_acc = evaluate(model_ema, criterion, ece_criterion, data_loader_test, device=device, log_suffix="EMA")
+                test_acc = evaluate(model_ema, criterion, ece_criterion, data_loader_test, args=args, device=device, log_suffix="EMA")
             if args.output_dir:
                 checkpoint = {
                     "model": model_without_ddp.state_dict(),
@@ -231,27 +235,35 @@ def main(args):
 
         # Add all the information to the results_df
         # 'Tuning Method','Train Percent','LR','Test Acc@1','Vector Path'
-        new_row = [args.tuning_method, trainable_percentage, args.lr, test_acc, os.path.join(args.vector_savepath, filename)]
+        if(args.masking_vector_idx is not None):
+            new_row = [args.tuning_method, trainable_percentage, args.lr, test_acc, mask_filename]
+        else:
+            new_row = [args.tuning_method, trainable_percentage, args.lr, test_acc, os.path.join(args.vector_savepath, filename)]
+
         results_df.loc[len(results_df)] = new_row
         results_df.to_csv(os.path.join(args.output_dir, args.results_df), index=False)
 
-        plot_changes(ckpt_path, base_model, args)
+        #plot_changes(ckpt_path, base_model, args)
 
-        if(args.tuning_method != 'fullft'):
+        if(args.save_flag):
             print("Saving Masking Vector at: {}".format(os.path.join(args.vector_savepath, filename)))
+
         print("Saving results df at: {}".format(os.path.join(args.output_dir, args.results_df)))
 
 
 if __name__ == "__main__":
+
     args = get_args_parser().parse_args()
-    #args.output_dir = os.path.join(args.output_dir, args.model)
-    #args.output_dir = os.path.join(os.getcwd(), args.model)
     args.output_dir = os.path.join(os.getcwd(), args.model, args.dataset)
-    args.results_df = args.tuning_method + '_' + args.model + '_' + str(args.lr) + '.csv'
-    #args.vector_savepath = os.path.join('../saved_vectors', args.model, args.tuning_method+'_' + str(args.lr))
+    args.results_df = 'Fixed_Vectors_' + args.tuning_method + '_' + args.model + '_' + str(args.lr) + '.csv'
 
     current_wd = os.getcwd()
     args.vector_savepath = os.path.join(current_wd, 'saved_vectors', args.model, args.dataset, args.tuning_method + '_' + str(args.lr))
     args.fig_savepath = os.path.join(args.output_dir, 'plots/')
-    print(args.output_dir)
+    
+    if(args.masking_vector_idx is None and args.tuning_method != 'fullft'):
+        args.save_flag = True
+    else:
+        args.save_flag = False
+
     main(args)

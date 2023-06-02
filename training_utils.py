@@ -59,7 +59,7 @@ def train_one_epoch(model, criterion, ece_criterion, optimizer, data_loader, dev
                 # Reset ema buffer to keep copying weights during warmup period
                 model_ema.n_averaged.fill_(0)
 
-        acc1, acc5 = utils.accuracy(output, target, topk=(1, 5))
+        acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
         batch_size = image.shape[0]
         metric_logger.update(loss=loss.item(), lr=optimizer.param_groups[0]["lr"])
         metric_logger.update(ece_loss=ece_loss.item(), lr=optimizer.param_groups[0]["lr"])
@@ -67,7 +67,7 @@ def train_one_epoch(model, criterion, ece_criterion, optimizer, data_loader, dev
         metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
         metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
 
-def evaluate(model, criterion, ece_criterion, data_loader, device, print_freq=100, log_suffix=""):
+def evaluate(model, criterion, ece_criterion, data_loader, device, args, print_freq=100, log_suffix=""):
     model.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = f"Test: {log_suffix}"
@@ -81,7 +81,7 @@ def evaluate(model, criterion, ece_criterion, data_loader, device, print_freq=10
             loss = criterion(output, target)
             ece_loss = ece_criterion(output, target)
 
-            acc1, acc5 = utils.accuracy(output, target, topk=(1, 5))
+            acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
             # FIXME need to take into account that the datasets
             # could have been padded in distributed setup
             batch_size = image.shape[0]
@@ -333,6 +333,8 @@ def get_data(args):
             path = os.path.join(args.dataset_basepath, "Pneumonia_Detection/")
         elif(args.dataset == 'smdg'):
             path = os.path.join(args.dataset_basepath, "SMDG/")
+        else:
+            raise NotImplementedError
 
         train_dir = os.path.join(path, "train")
         val_dir = os.path.join(path, "val")

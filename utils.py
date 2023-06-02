@@ -121,11 +121,18 @@ def tune_attention_layers_random(model, model_type='timm'):
     return vector
 
 
-def tune_blocks_random(model, segment):
+def tune_blocks_random(model, mask, segment):
+
     vector = []
 
     for idx, block in enumerate(model.blocks):
-        if(np.random.random(1)[0] >= 0.5):
+
+        if(mask is None):
+            bit = int(np.random.random(1)[0] > 0.5)
+        else:
+            bit = mask[idx]
+
+        if(bit == 1):
             print("Enabling {} in Block {}".format(segment, idx))
             if(segment == 'attention'):
                 enable_module(block.attn)
@@ -143,7 +150,10 @@ def tune_blocks_random(model, segment):
                 disable_module(block.norm2)
             
             vector.append(0)
-            
+    
+    if(mask is not None):
+        assert mask == vector
+        
     return vector
 
 def tune_attention_layers(model):
@@ -280,7 +290,7 @@ def get_timm_model(encoder, num_classes, **kwargs):
 
     return model
 
-def get_masked_model(model, method):
+def get_masked_model(model, method, **kwargs):
     if(method == 'fullft'):
         pass
     if(method == 'tune_attention'):
@@ -291,7 +301,7 @@ def get_masked_model(model, method):
         vector = tune_attention_layers_random(model)
     elif(method == 'tune_attention_blocks_random'):
         disable_module(model)
-        vector = tune_blocks_random(model, segment='attention')
+        vector = tune_blocks_random(model, kwargs["mask"], segment='attention')
     elif(method == 'bitfit'):
         vector = get_model_for_bitfit(model, 'timm')
     elif(method == 'tune_bitfit_random'):
@@ -304,7 +314,7 @@ def get_masked_model(model, method):
         vector = tune_layernorm_random(model)
     elif(method == 'tune_layernorm_blocks_random'):
         disable_module(model)
-        vector = tune_blocks_random(model, segment='layernorm')
+        vector = tune_blocks_random(model, kwargs["mask"], segment='layernorm')
     else:
         raise NotImplementedError
 
