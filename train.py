@@ -1,5 +1,4 @@
 import os
-#os.environ["TORCH_HOME"] = "/disk/scratch2/raman/"
 os.environ["TORCH_HOME"] = os.path.dirname(os.getcwd())
 
 import datetime
@@ -114,21 +113,25 @@ def main(args):
 
     if(args.tuning_method != 'fullft'):
 
-        masking_vector = utils.get_masked_model(model, args.tuning_method, mask=list(mask))
-        print("MASKING VECTOR: ", masking_vector)
+        if(args.tuning_method == 'lora'):
+            model = utils.create_lora_model(model, block_mask=mask)
+
+        else:
+            masking_vector = utils.get_masked_model(model, args.tuning_method, mask=list(mask))
+            print("MASKING VECTOR: ", masking_vector)
 
 
     # Save the Masking Vector
     #if(args.masking_vector_idx is None):
-    if(args.save_flag):
-        vector_idx += 1
-        print("VECTOR INDEX: ", vector_idx)
-        filename = args.tuning_method + '_' + 'vector_' + str(vector_idx) + '.npy'
+    # if(args.save_flag):
+    #     vector_idx += 1
+    #     print("VECTOR INDEX: ", vector_idx)
+    #     filename = args.tuning_method + '_' + 'vector_' + str(vector_idx) + '.npy'
 
-        if(args.tuning_method != 'fullft'):
+        # if(args.tuning_method != 'fullft'):
             
-            with open(os.path.join(args.vector_savepath, filename), 'wb') as f:
-                np.save(f, np.array(masking_vector))
+        #     with open(os.path.join(args.vector_savepath, filename), 'wb') as f:
+        #         np.save(f, np.array(masking_vector))
 
     #Add Linear Layer
     # linear_layer = nn.Linear(model.head.in_features, args.num_classes)
@@ -176,6 +179,8 @@ def main(args):
 
     #From training_utils.py
     model_ema = get_model_ema(model_without_ddp, args)
+    print("model ema", model_ema)
+
 
     if args.resume:
         checkpoint = torch.load(args.resume, map_location="cpu")
@@ -209,9 +214,9 @@ def main(args):
                 train_sampler.set_epoch(epoch)
             train_one_epoch(model, criterion, ece_criterion, optimizer, data_loader, device, epoch, args, model_ema, scaler)
             lr_scheduler.step()
-            test_acc = evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
+            test_acc, test_loss = evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
             if model_ema:
-                test_acc = evaluate(model_ema, criterion, ece_criterion, data_loader_test, args=args, device=device, log_suffix="EMA")
+                test_acc, test_loss = evaluate(model_ema, criterion, ece_criterion, data_loader_test, args=args, device=device, log_suffix="EMA")
             if args.output_dir:
                 checkpoint = {
                     "model": model_without_ddp.state_dict(),
@@ -255,7 +260,8 @@ if __name__ == "__main__":
 
     args = get_args_parser().parse_args()
     args.output_dir = os.path.join(os.getcwd(), args.model, args.dataset)
-    args.results_df = 'Fixed_Vectors_' + args.tuning_method + '_' + args.model + '_' + str(args.lr) + '.csv'
+    #args.results_df = 'Fixed_Vectors_' + args.tuning_method + '_' + args.model + '_' + str(args.lr) + '.csv'
+    args.results_df = 'Fixed_Vectors_' + args.tuning_method + '_' + args.model + '.csv'
 
     current_wd = os.getcwd()
     args.vector_savepath = os.path.join(current_wd, 'saved_vectors', args.model, args.dataset, args.tuning_method + '_' + str(args.lr))

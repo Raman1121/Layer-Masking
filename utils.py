@@ -2,6 +2,7 @@ import os
 os.environ["TORCH_HOME"] = os.path.dirname(os.getcwd())
 
 import copy
+import loralib as lora
 import datetime
 import re
 import errno
@@ -68,58 +69,50 @@ def enable_from_vector(vector, model):
             disable_module(block.attn)
 
 
-def tune_attention_layers_random(model, model_type='timm'):
+def tune_attention_params_random(model, mask, model_type='timm'):
 
+    assert mask is not None
+
+    attn_params = [p for name_p, p in model.named_parameters() if '.attn.' in name_p or 'attention' in name_p]
     vector = []
-    
-    for name_p,p in model.named_parameters():
-        if '.attn.' in name_p or 'attention' in name_p:
-            if(np.random.random(1)[0] >= 0.5):
-                vector.append(1)
-                p.requires_grad = True
-            else:
-                vector.append(0)
+
+    for idx, p in enumerate(attn_params):
+        if(mask[idx] == 1):
+            p.requires_grad = True
+            vector.append(1)
         else:
             p.requires_grad = False
-        try:
-            #Timm Model
-            model.head.weight.requires_grad = True
-            model.head.bias.requires_grad = True
-        except:
-            #HF Model
-            model.classifier.weight.requires_grad = True
-            model.classifier.bias.requires_grad = True
+            vector.append(0)
+    
+    try:
+        #Timm Model
+        model.head.weight.requires_grad = True
+        model.head.bias.requires_grad = True
+    except:
+        #HF Model
+        model.classifier.weight.requires_grad = True
+        model.classifier.bias.requires_grad = True
         
-        # POSITION EMBEDDING
-        if(model_type == 'timm'):
-            try:
-                model.pos_embed.requires_grad = True
-            except:
-                print('no pos embedding')
-        elif(model_type == 'hf'):
-            try:
-                model.vit.embeddings.position_embeddings.requires_grad = True
-            except:
-                print('no pos embedding')
+    # POSITION EMBEDDING
+    if(model_type == 'timm'):
+        try:
+            model.pos_embed.requires_grad = True
+        except:
+            print('no pos embedding')
             
-        # PATCH EMBEDDING
-        if(model_type == 'timm'):
-            try:
-                for p in model.patch_embed.parameters():
-                    p.requires_grad = False
-            except:
-                print('no patch embed')
-                
-        elif(model_type == 'hf'):
-            try:
-                for p in model.vit.embeddings.patch_embeddings.parameters():
-                    p.requires_grad = False
-            except:
-                print('no patch embed')
+    # PATCH EMBEDDING
+    if(model_type == 'timm'):
+        try:
+            for p in model.patch_embed.parameters():
+                p.requires_grad = False
+        except:
+            print('no patch embed')
 
     #print("MASKING VECTOR: ", vector)
-    return vector
+    
+    assert vector == mask
 
+    return vector
 
 def tune_blocks_random(model, mask, segment):
 
@@ -272,6 +265,31 @@ def get_model_bitfit_random(model):
 
     return vector
 
+def create_lora_model(model, lora_r: int = 8, 
+                      lora_alpha: int = 8, 
+                      lora_dropout: float = 0., 
+                      tune_k=False, 
+                      block_mask=None
+                      ):
+
+    lora_model = copy.deepcopy(model)
+    
+    tune_list = [True, True, True] if tune_k else [True, False, True]
+
+    block_mask = [1]*len(model.blocks) if block_mask is None else block_mask    #Apply LoRA to all attention layers if mask is not given.
+
+    for idx, block in enumerate(lora_model.blocks):
+        if(block_mask[idx] == 1):
+            in_d = block.attn.qkv.in_features
+            out_d = block.attn.qkv.out_features
+            block.attn.qkv = lora.MergedLinear(in_d, out_d, r=lora_r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, enable_lora=tune_list)
+
+    lora_model.load_state_dict(model.state_dict(),strict=False)
+    lora.mark_only_lora_as_trainable(lora_model)
+    
+    
+    return lora_model
+
 def get_timm_model(encoder, num_classes, **kwargs):
     '''
     Returns a timm model for a given encoder.
@@ -280,11 +298,11 @@ def get_timm_model(encoder, num_classes, **kwargs):
     assert num_classes is not None, "Number of classes cannot be None"
     
     if encoder == "vit_base":
-        model = timm.create_model("vit_base_patch16_224", pretrained=True, num_classes=num_classes) 
+        model = timm.create_model("vit_base_patch16_224", pretrained=True, num_classes=num_classes,) 
     elif encoder == 'vit_base_ssl':
-        model = timm.create_model("vit_base_patch16_224_dino", pretrained=True, num_classes=num_classes)
+        model = timm.create_model("vit_base_patch16_224_dino", pretrained=True, num_classes=num_classes,)
     elif encoder == "vit_large":
-        model = timm.create_model("vit_large_patch16_224", pretrained=True, num_classes=num_classes)
+        model = timm.create_model("vit_large_patch16_224", pretrained=True, num_classes=num_classes, )
     elif encoder == "vit_huge":
         model = timm.create_model("vit_huge_patch14_224", pretrained=True, num_classes=num_classes)
 
@@ -296,9 +314,9 @@ def get_masked_model(model, method, **kwargs):
     if(method == 'tune_attention'):
         disable_module(model)
         vector = tune_attention_layers(model)
-    elif(method == 'tune_attention_random'):
+    elif(method == 'tune_attention_params_random'):
         disable_module(model)
-        vector = tune_attention_layers_random(model)
+        vector = tune_attention_params_random(model, kwargs["mask"])
     elif(method == 'tune_attention_blocks_random'):
         disable_module(model)
         vector = tune_blocks_random(model, kwargs["mask"], segment='attention')
@@ -326,6 +344,11 @@ def get_model_from_vector(model, method, vector):
     if(method == 'tune_attention_blocks_random'):
         disable_module(model)
         enable_from_vector(vector, model)
+
+def create_random_mask(mask_length, device):
+    #return np.random.randint(low=0, high=2, size=mask_length)
+    return nn.Parameter(torch.ones(mask_length).to(device))
+    #return nn.Parameter(torch.randint(low=0, high=2, size=(mask_length,), dtype=torch.float32, requires_grad=True).to(device))
 
 
 def plot_changes(fine_tuned_ckpt, base_model, args):

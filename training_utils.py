@@ -33,10 +33,104 @@ def train_one_epoch(model, criterion, ece_criterion, optimizer, data_loader, dev
     for i, (image, target) in enumerate(metric_logger.log_every(data_loader, args.print_freq, header)):
         start_time = time.time()
         image, target = image.to(device), target.to(device)
+
+        with torch.cuda.amp.autocast(enabled=scaler is not None):
+            output = model(image)
+            loss = criterion(output, target)
+            # Calculate the gradients here manually
+            
+            ece_loss = ece_criterion(output, target)
+
+        optimizer.zero_grad()
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            if args.clip_grad_norm is not None:
+                # we should unscale the gradients of optimizer's assigned params if do gradient clipping
+                scaler.unscale_(optimizer)
+                nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            if args.clip_grad_norm is not None:
+                nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
+            optimizer.step()
+
+        if model_ema and i % args.model_ema_steps == 0:
+            model_ema.update_parameters(model)
+            if epoch < args.lr_warmup_epochs:
+                # Reset ema buffer to keep copying weights during warmup period
+                model_ema.n_averaged.fill_(0)
+
+        acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
+        batch_size = image.shape[0]
+        metric_logger.update(loss=loss.item(), lr=optimizer.param_groups[0]["lr"])
+        metric_logger.update(ece_loss=ece_loss.item(), lr=optimizer.param_groups[0]["lr"])
+        metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
+        metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+        metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
+
+# def get_attn_params(model):
+#     attn_params = []
+#     num_blocks = len(model.blocks)
+    
+#     for i in range(num_blocks):
+#         block_attn_params = []
+#         block = model.blocks[i]
+
+#         # block_attn_params.append(block.attn.qkv.weight)
+#         # block_attn_params.append(block.attn.qkv.bias)
+#         # block_attn_params.append(block.attn.proj.weight)
+#         # block_attn_params.append(block.attn.proj.bias)
+
+#         block_attn_params.append(block.attn)
+
+#     attn_params.append(block_attn_params)
+
+#     return attn_params
+
+def get_attn_params(model):
+    attn_params = []
+    num_blocks = len(model.blocks)
+
+    # Get attention parameters from each block
+    for n,p in model.named_parameters():
+        if 'attn' in n:
+            attn_params.append(p)   
+
+    return attn_params 
+
+def meta_train_one_epoch(model, criterion, ece_criterion, optimizer, data_loader, device, epoch, args, model_ema=None, scaler=None):
+    model.train()
+    metric_logger = utils.MetricLogger(delimiter="  ")
+    metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value}"))
+    metric_logger.add_meter("img/s", utils.SmoothedValue(window_size=10, fmt="{value}"))
+
+    header = f"Epoch: [{epoch}]"
+    for i, (image, target) in enumerate(metric_logger.log_every(data_loader, args.print_freq, header)):
+        start_time = time.time()
+        image, target = image.to(device), target.to(device)
+
         with torch.cuda.amp.autocast(enabled=scaler is not None):
             output = model(image)
             loss = criterion(output, target)
             ece_loss = ece_criterion(output, target)
+
+            # Calculate the gradients here manually
+            # 1. Collect attention parameters
+            attn_params = get_attn_params(model)
+
+            # 2. Calculate the gradients (manually)
+            grad = torch.autograd.grad(loss, attn_params, create_graph=True)
+
+            # 3. Update the attention parameters using the update equation
+            for k, weight in enumerate(attn_params):
+                if weight.fast is None:
+                    attn_params[k] = weight - args.meta_lr * args.mask[k] * grad[k]
+                else:
+                    attn_params[k] = weight.fast - args.meta_lr * args.mask[k] * grad[k]   
+
+            # 4. TODO: We might need to clip the mask between 0 and 1
 
         optimizer.zero_grad()
         if scaler is not None:
@@ -109,7 +203,7 @@ def evaluate(model, criterion, ece_criterion, data_loader, device, args, print_f
     metric_logger.synchronize_between_processes()
 
     print(f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f}")
-    return metric_logger.acc1.global_avg
+    return metric_logger.acc1.global_avg, loss
 
 def _get_cache_path(filepath):
     import hashlib
