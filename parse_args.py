@@ -20,8 +20,9 @@ def get_args_parser(add_help=True):
     )
     parser.add_argument("--opt", default="sgd", type=str, help="optimizer")
     parser.add_argument("--lr", default=0.1, type=float, help="initial learning rate")
-    parser.add_argument("--inner_lr", default=0.1, type=float, help="initial learning rate")
-    parser.add_argument("--outer_lr", default=0.1, type=float, help="initial learning rate")
+    #parser.add_argument("--inner_lr", default=0.1, type=float, help="initial learning rate")
+    parser.add_argument("--lr_scaler", default=1, type=float, help="Multiplier for the LR used in the inner loop weight update")
+    parser.add_argument("--outer_lr", default=0.1, type=float, help="outer loop learning rate")
     parser.add_argument("--momentum", default=0.9, type=float, metavar="M", help="momentum")
     parser.add_argument(
         "--wd",

@@ -1,9 +1,9 @@
 import os
-#os.environ["TORCH_HOME"] = "/disk/scratch2/raman/"
 os.environ["TORCH_HOME"] = os.path.dirname(os.getcwd())
 
 import datetime
 import random
+from pprint import pprint
 import re
 import time
 import warnings
@@ -28,6 +28,7 @@ from torchvision.transforms.functional import InterpolationMode
 torch.autograd.set_detect_anomaly(True)
 
 def main(args):
+
     os.makedirs(args.fig_savepath, exist_ok=True)
 
     #Making directory for saving checkpoints
@@ -114,6 +115,12 @@ def main(args):
 
     model.to(device)
 
+    keys = ['mask_el_'+str(i) for i in range(mask_length)]
+    values = [[] for i in range(mask_length)]
+    MASK_DICT = {key: value for key, value in zip(keys, values)} #A dictionary to store the values of each mask param during training
+
+
+
     if args.distributed and args.sync_bn:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
@@ -137,7 +144,7 @@ def main(args):
 
     #Optimizer
     inner_optimizer = get_optimizer(args, parameters)
-    outer_optimizer = get_optimizer(args, [args.mask])
+    outer_optimizer = get_optimizer(args, [args.mask], meta=True)
     scaler = torch.cuda.amp.GradScaler() if args.amp else None
 
     #LR Scheduler
@@ -212,31 +219,37 @@ def main(args):
                 with torch.cuda.amp.autocast(enabled=scaler is not None):
                     inner_optimizer.zero_grad()
                     output = model(image)
+                    # print("Max and min values", torch.max(nn.Softmax(dim=1)(output)), torch.min(nn.Softmax(dim=1)(output)))
                     loss = criterion(output, target)
                     ece_loss = ece_criterion(output, target)
 
                     # Calculate the gradients here manually
                     # 1. Collect attention parameters
+                    #print("Attention parameters", attn_params)
                     attn_params = get_attn_params(model)
+                    print("All params trainable" if not check_trainability(attn_params) else "Not all params trainable")
+                    print("Loss: ", loss)
 
-                    # import pdb
-                    # pdb.set_trace()
 
                     # 2. Calculate the gradients (manually)
-                    grad = torch.autograd.grad(loss, attn_params, create_graph=True)
+                    try:
+                        grad = torch.autograd.grad(loss, attn_params, create_graph=True)
+                    except:
+                        import pdb
+                        pdb.set_trace()
+                    inner_lr = lr_scheduler.get_last_lr()[-1]
 
                     # 3. Update the attention parameters using the update equation
                     for k, weight in enumerate(attn_params):
                         if weight.fast is None:
-                            # = weight - args.inner_lr * args.mask[k] * grad[k]
-                            weight.fast = weight - args.inner_lr * args.mask[k//4] * grad[k]
+                            weight.fast = weight - inner_lr * args.lr_scaler * args.mask[k//4] * grad[k]
                         else:
                             #attn_params[k] = weight.fast - args.inner_lr * args.mask[k] * grad[k]   
-                            weight.fast = weight.fast - args.inner_lr * args.mask[k//4] * grad[k]   
+                            weight.fast = weight.fast - inner_lr * args.lr_scaler * args.mask[k//4] * grad[k]   
 
                     # 4. TODO: We might need to clip the mask between 0 and 1
 
-                    # OUTER LOOP: META TRAINING (THIS SHOULD BE ON VALIDATION DATA)
+                    # OUTER LOOP: META TRAINING (THIS SHOULD BE ON VALIDATION DATA) - TRAINING THE META PARAMS (MASK)
                     output = model(image_val)
                     meta_loss = criterion(output, target_val)
                     outer_optimizer.zero_grad()
@@ -249,19 +262,23 @@ def main(args):
 
                     # STANDARD UPDATE: Training the inner loop again for better training
 
-                    #TODO: Apply the updated mask here
+                    #TODO: THRESHOLD THE MASK HERE
+                    # TODO: CAN USE DIFFERENT SCHEMES: 1. SIGMOID
                     binary_mask = args.mask >= 1.0
                     binary_mask = binary_mask.long()
-                    print("BINARY MASK: ", binary_mask)
+                    #print("BINARY MASK: ", binary_mask)
 
+                    ## APPLY THE UPDATED MASK
                     for idx, block in enumerate(model.blocks):
                         if(binary_mask[idx] == 1):
                             enable_module(block.attn)
                         else:
                             disable_module(block.attn)
 
-                    check_tunable_params(model)
+                    check_tunable_params(model, False)
                     
+                    # STANDARD UPDATE
+                    print("STANDARD UPDATE")
                     output = model(image)
                     loss = criterion(output, target)
                     inner_optimizer.zero_grad()
@@ -269,12 +286,12 @@ def main(args):
                     inner_optimizer.step()
 
                     # Re-enabling all the attention blocks
-                    # for idx, block in enumerate(model.blocks):
-                    #     enable_module(block.attn)
-
-
+                    for idx, block in enumerate(model.blocks):
+                        enable_module(block.attn)
 
                     print("MASK: ", args.mask)
+                    MASK_DICT = track_mask(args.mask, MASK_DICT)
+                    #pprint(MASK_DICT)
                     # print("Clamping the mask")
                     #args.mask = torch.clamp(args.mask, 0, 1)
                     #print("MASK AFTER CLAMPING: ", args.mask)
@@ -313,6 +330,9 @@ def main(args):
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         print("Training time {}".format(total_time_str))
+
+        # Plotting the change in mask during training
+        plot_mask(MASK_DICT)
 
     # # Validation Loss using the trained model
     # val_acc, val_loss = evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device)

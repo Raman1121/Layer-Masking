@@ -9,6 +9,7 @@ import warnings
 import timm
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 import presets
 import torch
 import torch.utils.data
@@ -99,6 +100,59 @@ def get_attn_params(model):
             attn_params.append(p)   
 
     return attn_params 
+
+def check_trainability(params):
+    # Check if all the parameters in the 'params' list are trainable
+
+    for p in params:
+        if not p.requires_grad:
+            print(p)
+            return False
+
+def track_mask(mask, mask_dict):
+    # mask is a torch tensor
+    # mask is a list of 0s and 1s
+
+    mask = mask.detach().cpu().numpy()
+    mask = mask.tolist()
+
+    for i in range(len(mask_dict)):
+        mask_dict['mask_el_'+str(i)].append(mask[i])
+
+    return mask_dict
+
+def plot_mask(mask_dict):
+    keys = mask_dict.keys()
+    values = mask_dict.values()
+
+    # Create subplots
+    fig, axs = plt.subplots(len(mask_dict), 1, figsize=(8, 6), sharex=True)
+
+    for i, (key, value) in enumerate(zip(keys, values)):
+        axs[i].plot(value)
+        axs[i].set_ylabel(key)
+
+    # Add labels and title
+    axs[-1].set_xlabel('Training Steps')
+    #axs[-1].set_xticks()
+    fig.suptitle('Change in Mask Values during Training')
+
+    # Adjust spacing between subplots
+    plt.tight_layout()
+
+    # Save the plot as a PNG image
+    plt.savefig('Mask_plot.png')
+
+    # for key, value in zip(keys, values):
+    #     plt.plot(value, label=key)
+
+    # plt.xlabel('Mask Parameters')
+    # plt.ylabel('Mask Values')
+    # plt.title('Change in Mask Values during Training')
+    # plt.legend()
+
+    # plt.savefig('Mask_plot.png')
+
 
 def meta_train_one_epoch(model, criterion, ece_criterion, optimizer, data_loader, device, epoch, args, model_ema=None, scaler=None):
     model.train()
@@ -329,22 +383,26 @@ def load_data(traindir, valdir, args):
 
     return dataset, dataset_test, train_sampler, test_sampler
 
-def get_optimizer(args, parameters):
+def get_optimizer(args, parameters, meta=False):
     opt_name = args.opt.lower()
+    if meta:
+        lr = args.outer_lr
+    else:
+        lr = args.lr
     if opt_name.startswith("sgd"):
         optimizer = torch.optim.SGD(
             parameters,
-            lr=args.lr,
+            lr=lr,
             momentum=args.momentum,
             weight_decay=args.weight_decay,
             nesterov="nesterov" in opt_name,
         )
     elif opt_name == "rmsprop":
         optimizer = torch.optim.RMSprop(
-            parameters, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay, eps=0.0316, alpha=0.9
+            parameters, lr=lr, momentum=args.momentum, weight_decay=args.weight_decay, eps=0.0316, alpha=0.9
         )
     elif opt_name == "adamw":
-        optimizer = torch.optim.AdamW(parameters, lr=args.lr, weight_decay=args.weight_decay)
+        optimizer = torch.optim.AdamW(parameters, lr=lr, weight_decay=args.weight_decay)
     else:
         raise RuntimeError(f"Invalid optimizer {args.opt}. Only SGD, RMSprop and AdamW are supported.")
 

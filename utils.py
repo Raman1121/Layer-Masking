@@ -346,9 +346,13 @@ def get_model_from_vector(model, method, vector):
         enable_from_vector(vector, model)
 
 def create_random_mask(mask_length, device):
+    sigma = 0.1
     #return np.random.randint(low=0, high=2, size=mask_length)
-    return nn.Parameter(torch.ones(mask_length).to(device))
-    #return nn.Parameter(torch.randint(low=0, high=2, size=(mask_length,), dtype=torch.float32, requires_grad=True).to(device))
+    #return nn.Parameter(torch.ones(mask_length).to(device))
+    #return nn.Parameter(torch.randn(low=0, high=2, size=(mask_length,), dtype=torch.float32, requires_grad=True).to(device))
+
+    # Generate a random mask with values close to 1
+    return nn.Parameter(1 + sigma * torch.randn(mask_length, dtype=torch.float32, requires_grad=True).to(device))
 
 
 def plot_changes(fine_tuned_ckpt, base_model, args):
