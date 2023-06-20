@@ -7,6 +7,7 @@ import re
 import time
 import warnings
 import timm
+import numpy as np
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,6 +17,7 @@ import torch.utils.data
 import torchvision
 import transforms
 import utils
+from torch.utils.data.sampler import SubsetRandomSampler
 from sampler import RASampler
 from torch import nn
 from torch.utils.data.dataloader import default_collate
@@ -268,7 +270,7 @@ def _get_cache_path(filepath):
     return cache_path
 
 
-def load_data(traindir, valdir, args):
+def load_data(traindir, valdir, testdir, args):
     # Data loading code
     print("Loading data")
     val_resize_size, val_crop_size, train_crop_size = (
@@ -313,9 +315,28 @@ def load_data(traindir, valdir, args):
         if(args.dataset == 'CIFAR10'):
             dataset = torchvision.datasets.CIFAR10(root=args.dataset_basepath, train=True,
                                         download=True, transform=transform)
+
+            num_train = len(dataset)
+            indices = list(range(num_train))
+            split = int(np.floor(args.val_split * num_train))
+
+            train_idx, valid_idx = indices[split:], indices[:split]
+            train_sampler = SubsetRandomSampler(train_idx)
+            valid_sampler = SubsetRandomSampler(valid_idx)
+
         elif(args.dataset == 'CIFAR100'):
             dataset = torchvision.datasets.CIFAR100(root=args.dataset_basepath, train=True,
                                         download=True, transform=transform)
+            
+            num_train = len(dataset)
+            indices = list(range(num_train))
+            split = int(np.floor(args.val_split * num_train))
+
+            train_idx, valid_idx = indices[split:], indices[:split]
+            train_sampler = SubsetRandomSampler(train_idx)
+            valid_sampler = SubsetRandomSampler(valid_idx)
+            
+
         else:
             # dataset = torchvision.datasets.ImageFolder(
             #     traindir,
@@ -344,8 +365,8 @@ def load_data(traindir, valdir, args):
         cache_path = _get_cache_path(valdir)
     if args.cache_dataset and os.path.exists(cache_path):
         # Attention, as the transforms are also cached!
-        print(f"Loading dataset_test from {cache_path}")
-        dataset_test, _ = torch.load(cache_path)
+        print(f"Loading dataset_val from {cache_path}")
+        dataset_val, _ = torch.load(cache_path)
     else:
         if args.weights and args.test_only:
             weights = torchvision.models.get_weight(args.weights)
@@ -355,20 +376,28 @@ def load_data(traindir, valdir, args):
                 crop_size=val_crop_size, resize_size=val_resize_size, interpolation=interpolation
             )
         if(args.dataset == 'CIFAR10'):
+
+            dataset_val = torch.utils.data.Subset(dataset, valid_idx)
             dataset_test = torchvision.datasets.CIFAR10(root=args.dataset_basepath, train=False,
                                        download=True, transform=preprocessing)
         elif(args.dataset == 'CIFAR100'):
+            dataset_val = torch.utils.data.Subset(dataset, valid_idx)
             dataset_test = torchvision.datasets.CIFAR100(root=args.dataset_basepath, train=False,
                                        download=True, transform=preprocessing)
         else:
-            dataset_test = torchvision.datasets.ImageFolder(
+            dataset_val = torchvision.datasets.ImageFolder(
                 valdir,
                 preprocessing,
             )
+            dataset_test = torchvision.datasets.ImageFolder(
+                testdir,
+                preprocessing,
+            )
+
         if args.cache_dataset:
-            print(f"Saving dataset_test to {cache_path}")
+            print(f"Saving dataset_val to {cache_path}")
             utils.mkdir(os.path.dirname(cache_path))
-            utils.save_on_master((dataset_test, valdir), cache_path)
+            utils.save_on_master((dataset_val, valdir), cache_path)
 
     print("Creating data loaders")
     if args.distributed:
@@ -376,12 +405,19 @@ def load_data(traindir, valdir, args):
             train_sampler = RASampler(dataset, shuffle=True, repetitions=args.ra_reps)
         else:
             train_sampler = torch.utils.data.distributed.DistributedSampler(dataset)
+        valid_sampler = torch.utils.data.distributed.DistributedSampler(dataset_val, shuffle=False)
         test_sampler = torch.utils.data.distributed.DistributedSampler(dataset_test, shuffle=False)
     else:
-        train_sampler = torch.utils.data.RandomSampler(dataset)
+        if(args.dataset == 'CIFAR10' or args.dataset == 'CIFAR100'):
+            train_sampler = SubsetRandomSampler(train_idx)
+            valid_sampler = SubsetRandomSampler(valid_idx)
+        else:    
+            train_sampler = torch.utils.data.RandomSampler(dataset)
+            valid_sampler = torch.utils.data.SequentialSampler(dataset_val)
+
         test_sampler = torch.utils.data.SequentialSampler(dataset_test)
 
-    return dataset, dataset_test, train_sampler, test_sampler
+    return dataset, dataset_val, dataset_test, train_sampler, valid_sampler, test_sampler
 
 def get_optimizer(args, parameters, meta=False):
     opt_name = args.opt.lower()
@@ -472,6 +508,7 @@ def get_data(args):
     if(args.dataset == 'CIFAR10' or args.dataset == 'CIFAR100'):
         train_dir = None
         val_dir = None
+        test_dir = None
     else:
         if(args.dataset == 'HAM10000'):
             path = os.path.join(args.dataset_basepath, "HAM10000_dataset/")
@@ -490,8 +527,12 @@ def get_data(args):
 
         train_dir = os.path.join(path, "train")
         val_dir = os.path.join(path, "val")
+        test_dir = os.path.join(path, "test")
 
-    dataset, dataset_test, train_sampler, test_sampler = load_data(train_dir, val_dir, args)
+    #dataset, dataset_val, train_sampler, val_sampler = load_data(train_dir, val_dir, test_dir, args)
 
-    return dataset, dataset_test, train_sampler, test_sampler
+    dataset, dataset_val, dataset_test, train_sampler, val_sampler, test_sampler = load_data(train_dir, val_dir, test_dir, args)
+
+
+    return dataset, dataset_val, dataset_test, train_sampler, val_sampler, test_sampler
     

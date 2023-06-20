@@ -52,10 +52,12 @@ def main(args):
     else:
         torch.backends.cudnn.benchmark = True
 
-    dataset, dataset_test, train_sampler, test_sampler = get_data(args)
+    dataset, dataset_val, dataset_test, train_sampler, val_sampler, test_sampler = get_data(args)
     args.num_classes = len(dataset.classes)
     print("DATASET: ", args.dataset)
     print("Size of training dataset: ", len(dataset))
+    print("Size of validation dataset: ", len(dataset_val))
+    print("Size of test dataset: ", len(dataset_test))
     print("Number of classes: ", args.num_classes)
 
     collate_fn = None
@@ -75,11 +77,15 @@ def main(args):
         pin_memory=True,
         collate_fn=collate_fn,
     )
+    data_loader_val = torch.utils.data.DataLoader(
+        dataset_val, batch_size=args.batch_size, sampler=val_sampler, num_workers=args.workers, pin_memory=True
+    )
+
     data_loader_test = torch.utils.data.DataLoader(
         dataset_test, batch_size=args.batch_size, sampler=test_sampler, num_workers=args.workers, pin_memory=True
     )
 
-    loaders = zip(data_loader, cycle(data_loader_test))
+    loaders = zip(data_loader, cycle(data_loader_val))
 
     print("Creating model")
 
@@ -176,9 +182,9 @@ def main(args):
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
         if model_ema:
-            val_acc, val_loss = evaluate(model_ema, criterion, ece_criterion, data_loader_test, args=args, device=device, log_suffix="EMA")
+            val_acc, val_loss = evaluate(model_ema, criterion, ece_criterion, data_loader_val, args=args, device=device, log_suffix="EMA")
         else:
-            val_acc, val_loss = evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
+            val_acc, val_loss = evaluate(model, criterion, ece_criterion, data_loader_val, args=args, device=device)
         return
     
     # INNER LOOP: TRAINING PROCESS HERE
@@ -189,7 +195,7 @@ def main(args):
         print("Start training")
         start_time = time.time()
         for epoch in range(args.start_epoch, args.epochs):
-            loaders = zip(data_loader, cycle(data_loader_test))
+            loaders = zip(data_loader, cycle(data_loader_val))
             print("EPOCH: ", epoch)
             print("total epochs: ", args.epochs)
             if args.distributed:
@@ -308,7 +314,7 @@ def main(args):
             lr_scheduler.step()
             
             if model_ema:
-                val_acc, val_loss = evaluate(model_ema, criterion, ece_criterion, data_loader_test, args=args, device=device, log_suffix="EMA")
+                val_acc, val_loss = evaluate(model_ema, criterion, ece_criterion, data_loader_val, args=args, device=device, log_suffix="EMA")
             if args.output_dir:
                 checkpoint = {
                     "model": model_without_ddp.state_dict(),
@@ -333,37 +339,7 @@ def main(args):
 
         # Plotting the change in mask during training
         plot_mask(MASK_DICT)
-
-    # # Validation Loss using the trained model
-    # val_acc, val_loss = evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
-
-    # # OUTER LOOP: Manual update of the binary mask
-    # mask_grad = torch.autograd.grad(val_loss, args.mask, create_graph=True)
-
-    # # Update the mask parameters using the update equation
-    # args.mask = args.mask - args.outer_lr * mask_grad
-
-    # optimizer_outer.zero_grad()
-
-    # if scaler is not None:
-    #     scaler.scale(loss).backward()
-    #     if args.clip_grad_norm is not None:
-    #         # we should unscale the gradients of optimizer's assigned params if do gradient clipping
-    #         scaler.unscale_(optimizer_outer)
-    #         nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
-    #     scaler.step(optimizer_outer)
-    #     scaler.update()
-    # else:
-    #     loss.backward()
-    #     if args.clip_grad_norm is not None:
-    #         nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
-    #     optimizer_outer.step()
-
-# if model_ema and i % args.model_ema_steps == 0:
-#     model_ema.update_parameters(model)
-#     if epoch < args.lr_warmup_epochs:
-#         # Reset ema buffer to keep copying weights during warmup period
-#         model_ema.n_averaged.fill_(0)
+    
 
 if __name__ == "__main__":
 
@@ -380,5 +356,7 @@ if __name__ == "__main__":
         args.save_flag = True
     else:
         args.save_flag = False
+
+    args.val_split = 0.2
 
     main(args)
