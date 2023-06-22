@@ -140,7 +140,11 @@ def get_args_parser(add_help=True):
                             action="store_true",
                             help="To disable/ skip the training process.",
                         )
-
+    parser.add_argument(
+                            "--wandb_logging",
+                            action="store_true",
+                            help="To enable/ disable wandb logging.",
+                        )
     parser.add_argument(
         "--masking_vector_idx",
         type=int,
@@ -149,7 +153,23 @@ def get_args_parser(add_help=True):
     parser.add_argument(
         "--exp_vector_path",
         type=str,
-        default="/home/co-dutt1/rds/hpc-work/Layer-Masking/Experiment_Vectors_Parameter/"
+        default="/home/co-dutt1/rds/hpc-work/Layer-Masking/Experiment_Vectors/"
+    )
+    parser.add_argument(
+        "--ckpt_dir",
+        type=str,
+        default=None,
+        help="Path to the checkpoint directory"
+    )
+    parser.add_argument(
+        "--mask_gen_method",
+        default="random",
+        type=str,
+    )
+    parser.add_argument(
+        "--sigma",
+        default=0.1,
+        type=float,
     )
 
     return parser

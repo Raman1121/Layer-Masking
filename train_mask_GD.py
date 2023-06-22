@@ -3,6 +3,7 @@ os.environ["TORCH_HOME"] = os.path.dirname(os.getcwd())
 
 import datetime
 import random
+import wandb
 from pprint import pprint
 import re
 import time
@@ -11,6 +12,7 @@ import timm
 import pandas as pd
 import numpy as np
 import presets
+from PIL import Image
 from itertools import cycle
 import torch
 import torch.utils.data
@@ -29,7 +31,16 @@ torch.autograd.set_detect_anomaly(True)
 
 def main(args):
 
+    if(args.wandb_logging):
+        wandb.init(project='Dynamic Layer Masking',
+                   name=args.dataset+'_'+args.model+'_'+args.tuning_method+'_MaskGen_'+args.mask_gen_method)
+        
+        hparams_table = wandb.Table(dataframe=args.hparams_df, allow_mixed_types=True)
+        wandb.log({"Hyper Parameters": hparams_table})
+
+
     os.makedirs(args.fig_savepath, exist_ok=True)
+    track_trainable_params = []
 
     #Making directory for saving checkpoints
     if args.output_dir:
@@ -38,8 +49,10 @@ def main(args):
 
     try:
         results_df = pd.read_csv(os.path.join(args.output_dir, args.results_df))
+        test_results_df = pd.read_csv(os.path.join(args.output_dir, args.test_results_df))
     except:
         results_df = pd.DataFrame(columns=['Tuning Method','Train Percent','LR','Test Acc@1','Vector Path'])
+        test_results_df = pd.DataFrame(columns=['Tuning Method','Train Percent','LR Scaler', 'Inner LR', 'Outer LR','Test Acc@1','Vector Path'])
 
     utils.init_distributed_mode(args)
     print(args)
@@ -103,10 +116,22 @@ def main(args):
         mask_length = len(model.blocks) * 4
 
     print("Creating mask of length: ", mask_length)
-    args.mask = utils.create_random_mask(mask_length, device)
-    #args.mask.to(device)
+    args.mask = utils.create_random_mask(mask_length, args.mask_gen_method, device, sigma=args.sigma)
+    print("Initial Mask: ", args.mask)
 
-    #masking_vector = utils.get_masked_model(model, args.tuning_method, mask=list(args.mask)) # It is already asserted that mask == masking_vector
+    keys = ['mask_el_'+str(i) for i in range(mask_length)]
+    values = [[] for i in range(mask_length)]
+    MASK_DICT = {key: value for key, value in zip(keys, values)} #A dictionary to store the values of each mask param during training
+    #BINARY_MASK_DICT = {key: value for key, value in zip(keys, values)} #A dictionary to store the values of each binary mask element during training
+    BINARY_MASK_PLOT_ARRAYS = []
+
+    # Track the original mask and binary mask
+    MASK_DICT = track_mask(args.mask, MASK_DICT)
+    binary_mask = args.mask >= 1.0
+    binary_mask = binary_mask.long()
+    #BINARY_MASK_DICT = track_binary_mask(binary_mask, BINARY_MASK_DICT)
+    binary_mask_fig_arr = plot_binary_mask(binary_mask)
+    BINARY_MASK_PLOT_ARRAYS.append(binary_mask_fig_arr)
 
     # Disabling all parameters except attention
     for name, param in model.named_parameters():
@@ -119,13 +144,11 @@ def main(args):
     trainable_params, all_param = utils.check_tunable_params(model, True)
     trainable_percentage = 100 * trainable_params / all_param
 
+    # Track the original trainable percentage
+    if(args.wandb_logging):
+        wandb.log({"Trainable Percentage": trainable_percentage})
+
     model.to(device)
-
-    keys = ['mask_el_'+str(i) for i in range(mask_length)]
-    values = [[] for i in range(mask_length)]
-    MASK_DICT = {key: value for key, value in zip(keys, values)} #A dictionary to store the values of each mask param during training
-
-
 
     if args.distributed and args.sync_bn:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -182,9 +205,9 @@ def main(args):
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
         if model_ema:
-            val_acc, val_loss = evaluate(model_ema, criterion, ece_criterion, data_loader_val, args=args, device=device, log_suffix="EMA")
+            test_acc, test_loss = evaluate(model_ema, criterion, ece_criterion, data_loader_test, args=args, device=device, log_suffix="EMA")
         else:
-            val_acc, val_loss = evaluate(model, criterion, ece_criterion, data_loader_val, args=args, device=device)
+            test_acc, test_loss = evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
         return
     
     # INNER LOOP: TRAINING PROCESS HERE
@@ -196,8 +219,8 @@ def main(args):
         start_time = time.time()
         for epoch in range(args.start_epoch, args.epochs):
             loaders = zip(data_loader, cycle(data_loader_val))
-            print("EPOCH: ", epoch)
-            print("total epochs: ", args.epochs)
+            print("Epoch: ", epoch)
+            print("Total Epochs: ", args.epochs)
             if args.distributed:
                 train_sampler.set_epoch(epoch)
             #meta_train_one_epoch(model, criterion, ece_criterion, inner_optimizer, data_loader, device, epoch, args, model_ema, scaler)
@@ -233,7 +256,7 @@ def main(args):
                     # 1. Collect attention parameters
                     #print("Attention parameters", attn_params)
                     attn_params = get_attn_params(model)
-                    print("All params trainable" if not check_trainability(attn_params) else "Not all params trainable")
+                    #print("All params trainable" if not check_trainability(attn_params) else "Not all params trainable")
                     print("Loss: ", loss)
 
 
@@ -244,6 +267,10 @@ def main(args):
                         import pdb
                         pdb.set_trace()
                     inner_lr = lr_scheduler.get_last_lr()[-1]
+
+                    if(args.wandb_logging):
+                        wandb.log({"Inner LR": inner_lr})
+                        wandb.log({"Outer LR": args.outer_lr})
 
                     # 3. Update the attention parameters using the update equation
                     for k, weight in enumerate(attn_params):
@@ -258,6 +285,10 @@ def main(args):
                     # OUTER LOOP: META TRAINING (THIS SHOULD BE ON VALIDATION DATA) - TRAINING THE META PARAMS (MASK)
                     output = model(image_val)
                     meta_loss = criterion(output, target_val)
+
+                    if(args.wandb_logging):
+                        wandb.log({"Meta Loss": meta_loss})
+
                     outer_optimizer.zero_grad()
                     meta_loss.backward(retain_graph=True)
                     outer_optimizer.step()
@@ -270,9 +301,13 @@ def main(args):
 
                     #TODO: THRESHOLD THE MASK HERE
                     # TODO: CAN USE DIFFERENT SCHEMES: 1. SIGMOID
+                    
                     binary_mask = args.mask >= 1.0
                     binary_mask = binary_mask.long()
-                    #print("BINARY MASK: ", binary_mask)
+
+                    if(args.wandb_logging):
+                        binary_mask_fig_arr = plot_binary_mask(binary_mask)
+                        BINARY_MASK_PLOT_ARRAYS.append(binary_mask_fig_arr)
 
                     ## APPLY THE UPDATED MASK
                     for idx, block in enumerate(model.blocks):
@@ -281,7 +316,12 @@ def main(args):
                         else:
                             disable_module(block.attn)
 
-                    check_tunable_params(model, False)
+                    trainable_params, all_param = check_tunable_params(model, False)
+                    trainable_percentage = 100 * trainable_params / all_param
+                    track_trainable_params.append(trainable_percentage)
+
+                    if(args.wandb_logging):
+                        wandb.log({"Trainable Percentage": track_trainable_params[-1]})
                     
                     # STANDARD UPDATE
                     print("STANDARD UPDATE")
@@ -291,16 +331,32 @@ def main(args):
                     loss.backward()
                     inner_optimizer.step()
 
+                    acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
+                    print("ACC1: {}, ACC5: {}, LOSS: {}".format(acc1, acc5, loss))
+
+                    if(args.wandb_logging):
+                        wandb.log({"Train Accuracy": acc1})
+                        wandb.log({"Standard Update Loss": loss})
+
                     # Re-enabling all the attention blocks
                     for idx, block in enumerate(model.blocks):
                         enable_module(block.attn)
 
                     print("MASK: ", args.mask)
                     MASK_DICT = track_mask(args.mask, MASK_DICT)
-                    #pprint(MASK_DICT)
-                    # print("Clamping the mask")
-                    #args.mask = torch.clamp(args.mask, 0, 1)
-                    #print("MASK AFTER CLAMPING: ", args.mask)
+                    #BINARY_MASK_DICT = track_mask(binary_mask, BINARY_MASK_DICT)
+
+                    if(args.wandb_logging):
+                        temp_binary_mask = binary_mask.cpu().detach().numpy().tolist()
+
+                        _df_mask = pd.DataFrame(MASK_DICT)
+
+                        table = wandb.Table(dataframe=_df_mask)
+                        #binary_table = wandb.Table(dataframe=_df_binary_mask)
+
+                        #wandb.log({"Mask Params": table, "Binary Mask Params": binary_table})
+                        wandb.log({"Mask Params": table})
+                    
                     print("\n")
 
                 acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
@@ -331,14 +387,35 @@ def main(args):
                 ckpt_path = os.path.join(args.output_dir, 'checkpoints', "meta_checkpoint_" + args.tuning_method + ".pth")
                 utils.save_on_master(checkpoint, ckpt_path)
 
+            
+
         print("Training Finished")
+
+        if(args.wandb_logging):
+            BINARY_MASK_PLOT_ARRAYS = np.vstack(BINARY_MASK_PLOT_ARRAYS)
+            plot_img = Image.fromarray(BINARY_MASK_PLOT_ARRAYS)
+            wandb.log({"Binary Mask Plot": wandb.Image(plot_img)})
+
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         print("Training time {}".format(total_time_str))
 
         # Plotting the change in mask during training
-        plot_mask(MASK_DICT)
+        plot_mask(args, MASK_DICT)
+
+        val_acc, val_loss = evaluate(model, criterion, ece_criterion, data_loader_val, args=args, device=device)
+        print("Val accuracy: ", val_acc)
+        print("Val loss: ", val_loss)
+
+        test_acc, test_loss = evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
+        print("Test accuracy: ", test_acc)
+        print("Test loss: ", test_loss)
+
+        #columns=['Tuning Method','Train Percent','LR Scaler', 'Inner LR', 'Outer LR','Test Acc@1','Vector Path']
+        new_row = ['Dynamic_'+args.tuning_method, np.mean(track_trainable_params), args.lr_scaler, args.lr, args.outer_lr, test_acc, np.nan]
+        test_results_df.loc[len(test_results_df)] = new_row
+        test_results_df.to_csv(os.path.join(args.output_dir, args.test_results_df), index=False)
     
 
 if __name__ == "__main__":
@@ -347,7 +424,7 @@ if __name__ == "__main__":
     args.output_dir = os.path.join(os.getcwd(), args.model, args.dataset)
     #args.results_df = 'Fixed_Vectors_' + args.tuning_method + '_' + args.model + '_' + str(args.lr) + '.csv'
     args.results_df = 'Fixed_Vectors_' + args.tuning_method + '_' + args.model + '.csv'
-
+    args.test_results_df = 'Test_set_results_' + args.tuning_method + '_' + args.model + '.csv'
     current_wd = os.getcwd()
     args.vector_savepath = os.path.join(current_wd, 'saved_vectors', args.model, args.dataset, args.tuning_method + '_' + str(args.lr))
     args.fig_savepath = os.path.join(args.output_dir, 'plots/')
@@ -358,5 +435,19 @@ if __name__ == "__main__":
         args.save_flag = False
 
     args.val_split = 0.2
+
+    hparams_df = pd.DataFrame(columns=['Hparams', 'Value'])
+    hparams_df.loc[len(hparams_df)] = ['Inner LR', args.lr]
+    hparams_df.loc[len(hparams_df)] = ['Outer LR', args.outer_lr]
+    hparams_df.loc[len(hparams_df)] = ['LR Scaler', args.lr_scaler]
+    hparams_df.loc[len(hparams_df)] = ['Tuning Method', str(args.tuning_method)]
+    hparams_df.loc[len(hparams_df)] = ['LR Warmup Epochs', args.lr_warmup_epochs]
+    hparams_df.loc[len(hparams_df)] = ['Sigma', args.sigma]
+    hparams_df.loc[len(hparams_df)] = ['Mask Gen Method', args.mask_gen_method]
+    hparams_df.loc[len(hparams_df)] = ['Dataset', args.dataset]
+
+    print(hparams_df)
+                                    
+    args.hparams_df = hparams_df
 
     main(args)

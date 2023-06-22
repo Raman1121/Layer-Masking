@@ -62,8 +62,10 @@ def main(args):
     
     try:
         results_df = pd.read_csv(os.path.join(args.output_dir, args.results_df))
+        test_results_df = pd.read_csv(os.path.join(args.output_dir, args.test_results_df))
     except:
         results_df = pd.DataFrame(columns=['Tuning Method','Train Percent','LR','Test Acc@1','Vector Path'])
+        test_results_df = pd.DataFrame(columns=['Tuning Method','Train Percent','Inner LR', 'Outer LR','Test Acc@1','Vector Path'])
 
 
     utils.init_distributed_mode(args)
@@ -77,10 +79,12 @@ def main(args):
     else:
         torch.backends.cudnn.benchmark = True
 
-    dataset, dataset_test, train_sampler, test_sampler = get_data(args)
+    dataset, dataset_val, dataset_test, train_sampler, val_sampler, test_sampler = get_data(args)
     args.num_classes = len(dataset.classes)
     print("DATASET: ", args.dataset)
     print("Size of training dataset: ", len(dataset))
+    print("Size of validation dataset: ", len(dataset_val))
+    print("Size of test dataset: ", len(dataset_test))
     print("Number of classes: ", args.num_classes)
 
     collate_fn = None
@@ -99,6 +103,9 @@ def main(args):
         num_workers=args.workers,
         pin_memory=True,
         collate_fn=collate_fn,
+    )
+    data_loader_val = torch.utils.data.DataLoader(
+        dataset_val, batch_size=args.batch_size, sampler=val_sampler, num_workers=args.workers, pin_memory=True
     )
     data_loader_test = torch.utils.data.DataLoader(
         dataset_test, batch_size=args.batch_size, sampler=test_sampler, num_workers=args.workers, pin_memory=True
@@ -199,9 +206,9 @@ def main(args):
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
         if model_ema:
-            evaluate(model_ema, criterion, ece_criterion, data_loader_test, args=args, device=device, log_suffix="EMA")
+            evaluate(model_ema, criterion, ece_criterion, data_loader_val, args=args, device=device, log_suffix="EMA")
         else:
-            evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
+            evaluate(model, criterion, ece_criterion, data_loader_val, args=args, device=device)
         return
 
     if(args.disable_training):
@@ -214,9 +221,9 @@ def main(args):
                 train_sampler.set_epoch(epoch)
             train_one_epoch(model, criterion, ece_criterion, optimizer, data_loader, device, epoch, args, model_ema, scaler)
             lr_scheduler.step()
-            test_acc, test_loss = evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
+            val_acc, val_loss = evaluate(model, criterion, ece_criterion, data_loader_val, args=args, device=device)
             if model_ema:
-                test_acc, test_loss = evaluate(model_ema, criterion, ece_criterion, data_loader_test, args=args, device=device, log_suffix="EMA")
+                val_acc, val_loss = evaluate(model_ema, criterion, ece_criterion, data_loader_val, args=args, device=device, log_suffix="EMA")
             if args.output_dir:
                 checkpoint = {
                     "model": model_without_ddp.state_dict(),
@@ -241,9 +248,9 @@ def main(args):
         # Add all the information to the results_df
         # 'Tuning Method','Train Percent','LR','Test Acc@1','Vector Path'
         if(args.masking_vector_idx is not None):
-            new_row = [args.tuning_method, trainable_percentage, args.lr, test_acc, mask_filename]
+            new_row = [args.tuning_method, trainable_percentage, args.lr, val_acc, mask_filename]
         else:
-            new_row = [args.tuning_method, trainable_percentage, args.lr, test_acc, os.path.join(args.vector_savepath, filename)]
+            new_row = [args.tuning_method, trainable_percentage, args.lr, val_acc, os.path.join(args.vector_savepath, filename)]
 
         results_df.loc[len(results_df)] = new_row
         results_df.to_csv(os.path.join(args.output_dir, args.results_df), index=False)
@@ -255,13 +262,23 @@ def main(args):
 
         print("Saving results df at: {}".format(os.path.join(args.output_dir, args.results_df)))
 
+        # Obtaining the performance on test set
+        test_acc, test_loss = evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
+        print("Test accuracy: ", test_acc)
+        print("Test loss: ", test_loss)
+
+        # Add these results to CSV
+        new_row2 = [args.tuning_method, trainable_percentage, np.nan, args.lr, np.nan, test_acc, mask_filename]
+        test_results_df.loc[len(test_results_df)] = new_row2
+        test_results_df.to_csv(os.path.join(args.output_dir, args.test_results_df), index=False)
+
 
 if __name__ == "__main__":
 
     args = get_args_parser().parse_args()
     args.output_dir = os.path.join(os.getcwd(), args.model, args.dataset)
-    #args.results_df = 'Fixed_Vectors_' + args.tuning_method + '_' + args.model + '_' + str(args.lr) + '.csv'
     args.results_df = 'Fixed_Vectors_' + args.tuning_method + '_' + args.model + '.csv'
+    args.test_results_df = 'Test_set_results_' + args.tuning_method + '_' + args.model + '.csv'
 
     current_wd = os.getcwd()
     args.vector_savepath = os.path.join(current_wd, 'saved_vectors', args.model, args.dataset, args.tuning_method + '_' + str(args.lr))

@@ -144,6 +144,8 @@ def tune_blocks_random(model, mask, segment):
             
             vector.append(0)
     
+    #print(mask)
+    #print(vector)
     if(mask is not None):
         assert mask == vector
         
@@ -345,14 +347,39 @@ def get_model_from_vector(model, method, vector):
         disable_module(model)
         enable_from_vector(vector, model)
 
-def create_random_mask(mask_length, device):
-    sigma = 0.1
+def create_random_mask(mask_length, generation_method, device, **kwargs):
+    
     #return np.random.randint(low=0, high=2, size=mask_length)
     #return nn.Parameter(torch.ones(mask_length).to(device))
     #return nn.Parameter(torch.randn(low=0, high=2, size=(mask_length,), dtype=torch.float32, requires_grad=True).to(device))
 
     # Generate a random mask with values close to 1
-    return nn.Parameter(1 + sigma * torch.randn(mask_length, dtype=torch.float32, requires_grad=True).to(device))
+    if(generation_method == 'random'):
+        sigma = kwargs['sigma']
+        mask = nn.Parameter(1 + sigma * torch.randn(mask_length, dtype=torch.float32, requires_grad=True).to(device))
+
+    if(generation_method == 'searched'):
+        '''
+        Generate a random mask with first and last three values centered around 1 and the rest centered around 0.5
+        '''
+        sigma = kwargs['sigma']
+        tensor = torch.zeros(mask_length, dtype=torch.float32)
+        tensor[:3] = 1 + sigma * torch.randn(3, dtype=torch.float32)
+        tensor[-3:] = 1 + sigma * torch.randn(3, dtype=torch.float32)
+        tensor[3:-3] = 0.5 + 0.1*sigma * torch.randn(mask_length-6, dtype=torch.float32) # Initialize these values with a smaller deviation (sigma)
+        tensor = tensor.requires_grad_(True).to(device)
+        mask = nn.Parameter(tensor)
+        # mask = nn.Parameter(torch.zeros(mask_length, dtype=torch.float32, requires_grad=True).to(device))
+
+        # # Initialize first and last three values centered around 1
+        # mask[:3] = 1 + sigma * torch.randn(3, dtype=torch.float32).to(device)
+        # mask[-3:] = 1 + sigma * torch.randn(3, dtype=torch.float32).to(device)
+
+        # # Initialize the rest of the values centered around 0.5
+        # mask[3:-3] = 0.5 + sigma * torch.randn(mask_length-6, dtype=torch.float32).to(device)
+
+    return mask
+    
 
 
 def plot_changes(fine_tuned_ckpt, base_model, args):
