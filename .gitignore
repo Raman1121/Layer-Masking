@@ -1,3 +1,4 @@
 saved_vectors/*
-vit_*/checkpoints/*
+vit_*/
 __pycache__/
+wandb/

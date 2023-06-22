@@ -436,6 +436,7 @@ if __name__ == "__main__":
 
     args.val_split = 0.2
 
+    # Saving the hparams to wandb
     hparams_df = pd.DataFrame(columns=['Hparams', 'Value'])
     hparams_df.loc[len(hparams_df)] = ['Inner LR', args.lr]
     hparams_df.loc[len(hparams_df)] = ['Outer LR', args.outer_lr]
