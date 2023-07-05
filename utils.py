@@ -134,6 +134,8 @@ def tune_blocks_random(model, mask, segment):
             elif(segment == 'layernorm'):
                 enable_module(block.norm1)
                 enable_module(block.norm2)
+            elif(segment == 'full'):
+                enable_module(block)
 
             vector.append(1)
         else:
@@ -143,6 +145,8 @@ def tune_blocks_random(model, mask, segment):
             elif(segment == 'layernorm'):
                 disable_module(block.norm1)
                 disable_module(block.norm2)
+            elif(segment == 'full'):
+                disable_module(block)
             
             vector.append(0)
     
@@ -360,6 +364,10 @@ def create_random_mask(mask_length, generation_method, device, **kwargs):
         sigma = kwargs['sigma']
         epsilon = 0.05
         mask = nn.Parameter(1 + sigma * torch.randn(mask_length, dtype=torch.float32, requires_grad=True).to(device))
+
+    elif(generation_method == 'constant'):
+        sigma = kwargs['sigma']
+        mask = nn.Parameter(sigma + torch.ones(mask_length, dtype=torch.float32, requires_grad=True).to(device))
         
     elif(generation_method == 'searched'):
         '''
