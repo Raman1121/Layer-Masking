@@ -22,6 +22,7 @@ def get_args_parser(add_help=True):
     parser.add_argument("--lr", default=0.1, type=float, help="initial learning rate")
     #parser.add_argument("--inner_lr", default=0.1, type=float, help="initial learning rate")
     parser.add_argument("--lr_scaler", default=1, type=float, help="Multiplier for the LR used in the inner loop weight update")
+
     parser.add_argument("--outer_lr", default=0.1, type=float, help="outer loop learning rate")
     parser.add_argument("--momentum", default=0.9, type=float, metavar="M", help="momentum")
     parser.add_argument(
@@ -57,6 +58,7 @@ def get_args_parser(add_help=True):
     parser.add_argument("--mixup-alpha", default=0.0, type=float, help="mixup alpha (default: 0.0)")
     parser.add_argument("--cutmix-alpha", default=0.0, type=float, help="cutmix alpha (default: 0.0)")
     parser.add_argument("--lr-scheduler", default="steplr", type=str, help="the lr scheduler (default: steplr)")
+    parser.add_argument("--lr-scheduler-outer", default="constant", type=str, help="the lr scheduler (default: constant)")
     parser.add_argument("--lr-warmup-epochs", default=0, type=int, help="the number of epochs to warmup (default: 0)")
     parser.add_argument(
         "--lr-warmup-method", default="constant", type=str, help="the warmup method (default: constant)"
@@ -169,6 +171,16 @@ def get_args_parser(add_help=True):
     parser.add_argument(
         "--sigma",
         default=0.1,
+        type=float,
+    )
+    parser.add_argument(
+        "--use_adaptive_threshold",
+        action="store_true",
+        help="Use adaptive thresholding for masking",
+                        )
+    parser.add_argument(
+        "--thr_ema_decay",
+        default=0.99,
         type=float,
     )
 

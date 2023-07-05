@@ -64,8 +64,9 @@ def main(args):
         results_df = pd.read_csv(os.path.join(args.output_dir, args.results_df))
         test_results_df = pd.read_csv(os.path.join(args.output_dir, args.test_results_df))
     except:
+        #columns=['Tuning Method','Train Percent','LR Scaler', 'Inner LR', 'Outer LR','Test Acc@1','Vector Path']
         results_df = pd.DataFrame(columns=['Tuning Method','Train Percent','LR','Test Acc@1','Vector Path'])
-        test_results_df = pd.DataFrame(columns=['Tuning Method','Train Percent','Inner LR', 'Outer LR','Test Acc@1','Vector Path'])
+        test_results_df = pd.DataFrame(columns=['Tuning Method','Train Percent','LR Scaler','Inner LR', 'Outer LR','Test Acc@1','Vector Path'])
 
 
     utils.init_distributed_mode(args)
@@ -86,6 +87,11 @@ def main(args):
     print("Size of validation dataset: ", len(dataset_val))
     print("Size of test dataset: ", len(dataset_test))
     print("Number of classes: ", args.num_classes)
+    print(dataset.class_to_idx)
+
+    args.class_to_idx = {value: key for key, value in dataset.class_to_idx.items()}
+    
+    print(args.class_to_idx)
 
     collate_fn = None
     mixup_transforms = get_mixup_transforms(args)
@@ -268,6 +274,7 @@ def main(args):
         print("Test loss: ", test_loss)
 
         # Add these results to CSV
+        #columns=['Tuning Method','Train Percent','LR Scaler', 'Inner LR', 'Outer LR','Test Acc@1','Vector Path']
         new_row2 = [args.tuning_method, trainable_percentage, np.nan, args.lr, np.nan, test_acc, mask_filename]
         test_results_df.loc[len(test_results_df)] = new_row2
         test_results_df.to_csv(os.path.join(args.output_dir, args.test_results_df), index=False)

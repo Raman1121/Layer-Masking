@@ -20,7 +20,7 @@ import torch.distributed as dist
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import sklearn.metrics as sklm
 
 ###################### HELPER FUNCTIONS #######################
 
@@ -75,6 +75,8 @@ def tune_attention_params_random(model, mask, model_type='timm'):
 
     attn_params = [p for name_p, p in model.named_parameters() if '.attn.' in name_p or 'attention' in name_p]
     vector = []
+
+    print(mask)
 
     for idx, p in enumerate(attn_params):
         if(mask[idx] == 1):
@@ -356,9 +358,10 @@ def create_random_mask(mask_length, generation_method, device, **kwargs):
     # Generate a random mask with values close to 1
     if(generation_method == 'random'):
         sigma = kwargs['sigma']
+        epsilon = 0.05
         mask = nn.Parameter(1 + sigma * torch.randn(mask_length, dtype=torch.float32, requires_grad=True).to(device))
-
-    if(generation_method == 'searched'):
+        
+    elif(generation_method == 'searched'):
         '''
         Generate a random mask with first and last three values centered around 1 and the rest centered around 0.5
         '''
@@ -654,6 +657,63 @@ def accuracy(output, target, topk=(1,)):
             correct_k = correct[:k].flatten().sum(dtype=torch.float32)
             res.append(correct_k * (100.0 / batch_size))
         return res
+
+def auc(output, target, **kwargs):
+    """Computes the top-1 AUC (Area Under the Curve)"""
+    with torch.inference_mode():
+        batch_size = target.size(0)
+        if target.ndim == 2:
+            target = target.max(dim=1)[1]
+
+        # Get the predicted probabilities for the positive class (top-1)
+        #pred_probs = torch.softmax(output, dim=1)[:, 0]
+        maxk = 1
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t().flatten().cpu().numpy()
+        #pred_probs = torch.sigmoid(output).cpu().data.numpy()
+
+        # Convert the tensors to NumPy arrays
+        target = target.cpu().data.numpy()
+        #pred_probs = pred_probs.detach().cpu().numpy()
+        #print(pred.shape, target.shape)
+        # Calculate the AUC using sklearn's roc_auc_score function
+        #fpr, tpr, thresholds = sklm.roc_curve(target, pred_probs, pos_label=1)
+        pos_label = 1 if kwargs['pos_label'] is None else kwargs['pos_label']
+        fpr, tpr, thresholds = sklm.roc_curve(target, pred, pos_label=pos_label)
+        auc = sklm.auc(fpr, tpr)
+
+        return auc
+
+def roc_auc_score_multiclass(pred_class, actual_class, average = "macro"):
+
+    with torch.inference_mode():
+        batch_size = actual_class.size(0)
+        if actual_class.ndim == 2:
+            actual_class = actual_class.max(dim=1)[1]
+
+    maxk = 1
+    _, pred_class = pred_class.topk(maxk, 1, True, True)
+    pred_class = pred_class.t().flatten().cpu().numpy()
+
+    actual_class = actual_class.cpu().data.numpy()
+    
+    #creating a set of all the unique classes using the actual class list
+    unique_class = set(actual_class)
+    roc_auc_dict = {}
+    for per_class in unique_class:
+        
+        #creating a list of all the classes except the current class 
+        other_class = [x for x in unique_class if x != per_class]
+
+        #marking the current class as 1 and all other classes as 0
+        new_actual_class = [0 if x in other_class else 1 for x in actual_class]
+        new_pred_class = [0 if x in other_class else 1 for x in pred_class]
+
+        #using the sklearn metrics method to calculate the roc_auc_score
+        roc_auc = sklm.roc_auc_score(new_actual_class, new_pred_class, average = average)
+        roc_auc_dict[per_class] = roc_auc
+
+    return roc_auc_dict
 
 
 def mkdir(path):

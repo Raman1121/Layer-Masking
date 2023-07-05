@@ -30,7 +30,7 @@ from torchvision.transforms.functional import InterpolationMode
 ######################################################################
 
 
-def train_one_epoch(model, criterion, ece_criterion, optimizer, data_loader, device, epoch, args, model_ema=None, scaler=None):
+def train_one_epoch(model, criterion, ece_criterion, optimizer, data_loader, device, epoch, args, model_ema=None, scaler=None, **kwargs):
     model.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value}"))
@@ -70,11 +70,16 @@ def train_one_epoch(model, criterion, ece_criterion, optimizer, data_loader, dev
                 model_ema.n_averaged.fill_(0)
 
         acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
+        #auc = utils.auc(output, target, pos_label=kwargs['pos_label'])
+        auc_dict = utils.roc_auc_score_multiclass(output, target)
+        auc = sum(auc_dict.keys()) / len(auc_dict)
+
         batch_size = image.shape[0]
         metric_logger.update(loss=loss.item(), lr=optimizer.param_groups[0]["lr"])
         metric_logger.update(ece_loss=ece_loss.item(), lr=optimizer.param_groups[0]["lr"])
         metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
         metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+        metric_logger.meters["auc"].update(auc, n=batch_size)
         metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
 
 # def get_attn_params(model):
@@ -169,8 +174,9 @@ def plot_mask(args, mask_dict):
 
     if(args.wandb_logging):
         #wandb.log({"Mask Params during Training": fig})
-        wandb.log({"Mask Params during Training": wandb.Image(plot_path,
-                                                              caption="Mask Params during Training")})
+        plot_path = os.path.join(args.fig_savepath, plot_path)
+        # wandb.log({"Mask Params during Training": wandb.Image(plot_path,
+        #                                                       caption="Mask Params during Training")})
 
     # for key, value in zip(keys, values):
     #     plt.plot(value, label=key)
@@ -244,7 +250,7 @@ def meta_train_one_epoch(model, criterion, ece_criterion, optimizer, data_loader
         metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
         metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
 
-def evaluate(model, criterion, ece_criterion, data_loader, device, args, print_freq=100, log_suffix=""):
+def evaluate(model, criterion, ece_criterion, data_loader, device, args, print_freq=100, log_suffix="", **kwargs):
     model.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = f"Test: {log_suffix}"
@@ -259,13 +265,30 @@ def evaluate(model, criterion, ece_criterion, data_loader, device, args, print_f
             ece_loss = ece_criterion(output, target)
 
             acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
-            # FIXME need to take into account that the datasets
-            # could have been padded in distributed setup
+            #auc = utils.auc(output, target, pos_label=kwargs['pos_label'])
+            auc_dict = utils.roc_auc_score_multiclass(output, target)
+            auc = sum(auc_dict.keys()) / len(auc_dict)
+
+            if(args.wandb_logging):
+
+                keys = list(auc_dict.keys())
+                keys = [int(key) for key in keys]
+                
+                labels = [args.class_to_idx[key] for key in keys]
+                values = list(auc_dict.values())
+
+                data = [[x,y] for (x,y) in zip(labels, values)]
+                table = wandb.Table(data=data, columns = ["Classes", "AUC"])
+                wandb.log({"AUC": wandb.plot.line(table, "Classes", "AUC", title="AUC Values")})
+
+
+
             batch_size = image.shape[0]
             metric_logger.update(loss=loss.item())
             metric_logger.update(ece_loss=ece_loss.item())
             metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
             metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+            metric_logger.meters["auc"].update(auc, n=batch_size)
             num_processed_samples += batch_size
     # gather the stats from all processes
 
@@ -286,7 +309,7 @@ def evaluate(model, criterion, ece_criterion, data_loader, device, args, print_f
     metric_logger.synchronize_between_processes()
 
     print(f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f}")
-    return metric_logger.acc1.global_avg, loss
+    return metric_logger.acc1.global_avg, loss, auc
 
 def _get_cache_path(filepath):
     import hashlib
@@ -440,9 +463,11 @@ def load_data(traindir, valdir, testdir, args):
             valid_sampler = SubsetRandomSampler(valid_idx)
         else:    
             train_sampler = torch.utils.data.RandomSampler(dataset)
-            valid_sampler = torch.utils.data.SequentialSampler(dataset_val)
+            #valid_sampler = torch.utils.data.SequentialSampler(dataset_val)
+            valid_sampler = torch.utils.data.RandomSampler(dataset_val)
 
-        test_sampler = torch.utils.data.SequentialSampler(dataset_test)
+        #test_sampler = torch.utils.data.SequentialSampler(dataset_test)
+        test_sampler = torch.utils.data.RandomSampler(dataset_test)
 
     return dataset, dataset_val, dataset_test, train_sampler, valid_sampler, test_sampler
 

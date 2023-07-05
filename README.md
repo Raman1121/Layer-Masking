@@ -9,5 +9,5 @@ torchrun --nproc_per_node=1 train.py --model vit_base --epochs 30 --batch-size 6
 Running Command for GD Mask Learning:
 
 ```
-python train_mask_GD.py --model vit_base --epochs 50 --batch-size 128 --opt adamw --lr 1e-4 --outer_lr 1e-3 --lr_scaler 100 --lr-scheduler cosineannealinglr --lr-warmup-method linear --lr-warmup-epochs 15 --lr-warmup-decay 0.033 --tuning_method tune_attention_blocks_random --dataset  --wandb_logging
+python train_mask_GD.py --model vit_base --epochs 50 --batch-size 128 --opt adamw --lr 1e-4 --outer_lr 1e-3 --lr_scaler 100 --lr-scheduler cosineannealinglr --lr-warmup-method linear --lr-warmup-epochs 15 --lr-warmup-decay 0.033 --tuning_method tune_attention_blocks_random --dataset breastUS --wandb_logging
 ```
