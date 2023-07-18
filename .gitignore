@@ -2,3 +2,4 @@ saved_vectors/*
 vit_*/
 __pycache__/
 wandb/
+*.out

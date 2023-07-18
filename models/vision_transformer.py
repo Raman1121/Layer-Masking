@@ -39,7 +39,7 @@ import torch.utils.checkpoint
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_INCEPTION_MEAN, IMAGENET_INCEPTION_STD
 from timm.models.helpers import build_model_with_cfg, named_apply, adapt_input_conv, resolve_pretrained_cfg, checkpoint_seq
 from timm.models.layers import DropPath, trunc_normal_, lecun_normal_, _assert
-from timm.models.layers.helpers import to_2tuple
+from timm.models.layers import to_2tuple
 from timm.models.registry import register_model
 
 
@@ -689,19 +689,37 @@ def checkpoint_filter_fn(state_dict, model):
     return out_dict
 
 
+# def _create_vision_transformer(variant, pretrained=False, **kwargs):
+#     if kwargs.get('features_only', None):
+#         raise RuntimeError('features_only not implemented for Vision Transformer models.')
+
+#     pretrained_cfg = resolve_pretrained_cfg(variant, pretrained_cfg=kwargs.pop('pretrained_cfg', None))
+#     model = build_model_with_cfg(
+#         VisionTransformer, variant, pretrained,
+#         pretrained_cfg=pretrained_cfg,
+#         pretrained_filter_fn=checkpoint_filter_fn,
+#         pretrained_custom_load='npz' in pretrained_cfg['url'],
+#         **kwargs)
+#     return model
+
 def _create_vision_transformer(variant, pretrained=False, **kwargs):
     if kwargs.get('features_only', None):
         raise RuntimeError('features_only not implemented for Vision Transformer models.')
 
-    pretrained_cfg = resolve_pretrained_cfg(variant, pretrained_cfg=kwargs.pop('pretrained_cfg', None))
-    model = build_model_with_cfg(
-        VisionTransformer, variant, pretrained,
-        pretrained_cfg=pretrained_cfg,
-        pretrained_filter_fn=checkpoint_filter_fn,
-        pretrained_custom_load='npz' in pretrained_cfg['url'],
-        **kwargs)
-    return model
+    if 'flexi' in variant:
+        # FIXME Google FlexiViT pretrained models have a strong preference for bilinear patch / embed
+        # interpolation, other pretrained models resize better w/ anti-aliased bicubic interpolation.
+        _filter_fn = partial(checkpoint_filter_fn, interpolation='bilinear', antialias=False)
+    else:
+        _filter_fn = checkpoint_filter_fn
 
+    return build_model_with_cfg(
+        VisionTransformer,
+        variant,
+        pretrained,
+        pretrained_filter_fn=_filter_fn,
+        **kwargs,
+    )
 
 @register_model
 def vit_tiny_patch16_224(pretrained=False, **kwargs):
@@ -745,7 +763,7 @@ def vit_small_patch16_384(pretrained=False, **kwargs):
 
 
 
-@register_model
+# @register_model
 def vit_base_patch16_224(pretrained=False, **kwargs):
     """ ViT-Base (ViT-B/16) from original paper (https://arxiv.org/abs/2010.11929).
     ImageNet-1k weights fine-tuned from in21k @ 224x224, source https://github.com/google-research/vision_transformer.
