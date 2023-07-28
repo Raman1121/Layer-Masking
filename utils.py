@@ -1,4 +1,5 @@
 import os
+
 os.environ["TORCH_HOME"] = os.path.dirname(os.getcwd())
 
 import copy
@@ -28,7 +29,8 @@ import sklearn.metrics as sklm
 def disable_module(module):
     for p in module.parameters():
         p.requires_grad = False
-        
+
+
 def enable_module(module):
     for p in module.parameters():
         p.requires_grad = True
@@ -40,11 +42,11 @@ def check_tunable_params(model, verbose=True):
     """
     trainable_params = 0
     all_param = 0
-    
+
     for name, param in model.named_parameters():
         all_param += param.numel()
         if param.requires_grad:
-            if(verbose):
+            if verbose:
                 print(name)
             trainable_params += param.numel()
     print(
@@ -53,165 +55,164 @@ def check_tunable_params(model, verbose=True):
 
     return trainable_params, all_param
 
-def enable_from_vector(vector, model):
 
+def enable_from_vector(vector, model):
     print("Vector: ", vector)
-    
+
     disable_module(model)
-    
-    for idx, block in enumerate(model.blocks): 
-    
-        if(vector[idx] == 1):
+
+    for idx, block in enumerate(model.blocks):
+        if vector[idx] == 1:
             print("Enabling attention in Block {}".format(idx))
             enable_module(block.attn)
         else:
-            #print("Disabling attention in Block {}".format(idx))
+            # print("Disabling attention in Block {}".format(idx))
             disable_module(block.attn)
 
 
-def tune_attention_params_random(model, mask, model_type='timm'):
-
+def tune_attention_params_random(model, mask, model_type="timm"):
     assert mask is not None
 
-    attn_params = [p for name_p, p in model.named_parameters() if '.attn.' in name_p or 'attention' in name_p]
+    attn_params = [
+        p
+        for name_p, p in model.named_parameters()
+        if ".attn." in name_p or "attention" in name_p
+    ]
     vector = []
 
     print(mask)
 
     for idx, p in enumerate(attn_params):
-        if(mask[idx] == 1):
+        if mask[idx] == 1:
             p.requires_grad = True
             vector.append(1)
         else:
             p.requires_grad = False
             vector.append(0)
-    
+
     try:
-        #Timm Model
+        # Timm Model
         model.head.weight.requires_grad = True
         model.head.bias.requires_grad = True
     except:
-        #HF Model
+        # HF Model
         model.classifier.weight.requires_grad = True
         model.classifier.bias.requires_grad = True
-        
+
     # POSITION EMBEDDING
-    if(model_type == 'timm'):
+    if model_type == "timm":
         try:
             model.pos_embed.requires_grad = True
         except:
-            print('no pos embedding')
-            
+            print("no pos embedding")
+
     # PATCH EMBEDDING
-    if(model_type == 'timm'):
+    if model_type == "timm":
         try:
             for p in model.patch_embed.parameters():
                 p.requires_grad = False
         except:
-            print('no patch embed')
+            print("no patch embed")
 
-    #print("MASKING VECTOR: ", vector)
-    
+    # print("MASKING VECTOR: ", vector)
+
     assert vector == mask
 
     return vector
 
-def tune_blocks_random(model, mask, segment):
 
+def tune_blocks_random(model, mask, segment):
     vector = []
 
     for idx, block in enumerate(model.blocks):
-
-        if(mask is None):
+        if mask is None:
             bit = int(np.random.random(1)[0] > 0.5)
         else:
             bit = mask[idx]
 
-        if(bit == 1):
+        if bit == 1:
             print("Enabling {} in Block {}".format(segment, idx))
-            if(segment == 'attention'):
+            if segment == "attention":
                 enable_module(block.attn)
-            elif(segment == 'layernorm'):
+            elif segment == "layernorm":
                 enable_module(block.norm1)
                 enable_module(block.norm2)
-            elif(segment == 'full'):
+            elif segment == "full":
                 enable_module(block)
 
             vector.append(1)
         else:
             print("Disabling {} in Block {}".format(segment, idx))
-            if(segment == 'attention'):
+            if segment == "attention":
                 disable_module(block.attn)
-            elif(segment == 'layernorm'):
+            elif segment == "layernorm":
                 disable_module(block.norm1)
                 disable_module(block.norm2)
-            elif(segment == 'full'):
+            elif segment == "full":
                 disable_module(block)
-            
+
             vector.append(0)
-    
-    #print(mask)
-    #print(vector)
-    if(mask is not None):
+
+    # print(mask)
+    # print(vector)
+    if mask is not None:
         assert mask == vector
-        
+
     return vector
 
-def tune_attention_layers(model):
 
+def tune_attention_layers(model):
     vector = []
-    
-    for name_p,p in model.named_parameters():
-        if '.attn.' in name_p or 'attention' in name_p:
+
+    for name_p, p in model.named_parameters():
+        if ".attn." in name_p or "attention" in name_p:
             vector.append(1)
             p.requires_grad = True
         else:
             p.requires_grad = False
-        
-        #Timm Model
+
+        # Timm Model
         model.head.weight.requires_grad = True
         model.head.bias.requires_grad = True
-    
-        
+
         # POSITION EMBEDDING
         try:
             model.pos_embed.requires_grad = True
         except:
-            print('no pos embedding')
-        
+            print("no pos embedding")
+
         # PATCH EMBEDDING
-        
+
         try:
             for p in model.patch_embed.parameters():
                 p.requires_grad = False
         except:
-            print('no patch embed')
+            print("no patch embed")
 
     return vector
-                
+
 
 def tune_layernorm_layers(model):
-
     disable_module(model)
 
     vector = []
 
-    for n,p in model.named_parameters():
-        if("norm" in n or "head" in n):
+    for n, p in model.named_parameters():
+        if "norm" in n or "head" in n:
             vector.append(1)
             p.requires_grad = True
 
     return vector
 
-def tune_layernorm_random(model):
 
+def tune_layernorm_random(model):
     disable_module(model)
 
     vector = []
 
-    for n,p in model.named_parameters():
-        if("norm" in n or "head" in n):
-            if(np.random.random(1)[0] >= 0.5):
+    for n, p in model.named_parameters():
+        if "norm" in n or "head" in n:
+            if np.random.random(1)[0] >= 0.5:
                 vector.append(1)
                 p.requires_grad = True
             else:
@@ -221,20 +222,20 @@ def tune_layernorm_random(model):
 
 
 def get_model_for_bitfit(model, model_type):
-    trainable_components = ['bias'] 
+    trainable_components = ["bias"]
 
     # Disale all the gradients
     for param in model.parameters():
-        param.requires_grad = False 
-    
-    #Add classification head to trainable components
+        param.requires_grad = False
+
+    # Add classification head to trainable components
     if trainable_components:
-        trainable_components = trainable_components + ['pooler.dense.bias']
-        
-    if(model_type == 'timm'):
-        trainable_components = trainable_components + ['head']
-    elif(model_type == 'hf'):
-        trainable_components = trainable_components + ['classifier']
+        trainable_components = trainable_components + ["pooler.dense.bias"]
+
+    if model_type == "timm":
+        trainable_components = trainable_components + ["head"]
+    elif model_type == "hf":
+        trainable_components = trainable_components + ["classifier"]
 
     vector = []
 
@@ -244,28 +245,29 @@ def get_model_for_bitfit(model, model_type):
                 vector.append(1)
                 param.requires_grad = True
                 break
-    
+
     return vector
 
+
 def get_model_bitfit_random(model):
-    trainable_components = ['bias'] 
+    trainable_components = ["bias"]
 
     # Disale all the gradients
     for param in model.parameters():
-        param.requires_grad = False 
-    
-    #Add classification head to trainable components
-    if trainable_components:
-        trainable_components = trainable_components + ['pooler.dense.bias']
+        param.requires_grad = False
 
-    trainable_components = trainable_components + ['head']
+    # Add classification head to trainable components
+    if trainable_components:
+        trainable_components = trainable_components + ["pooler.dense.bias"]
+
+    trainable_components = trainable_components + ["head"]
 
     vector = []
 
     for name, param in model.named_parameters():
         for component in trainable_components:
             if component in name:
-                if(np.random.random(1)[0] >= 0.5):
+                if np.random.random(1)[0] >= 0.5:
                     vector.append(1)
                     param.requires_grad = True
                 else:
@@ -273,74 +275,100 @@ def get_model_bitfit_random(model):
 
     return vector
 
-def create_lora_model(model, lora_r: int = 8, 
-                      lora_alpha: int = 8, 
-                      lora_dropout: float = 0., 
-                      tune_k=False, 
-                      block_mask=None
-                      ):
 
+def create_lora_model(
+    model,
+    lora_r: int = 8,
+    lora_alpha: int = 8,
+    lora_dropout: float = 0.0,
+    tune_k=False,
+    block_mask=None,
+):
     lora_model = copy.deepcopy(model)
-    
+
     tune_list = [True, True, True] if tune_k else [True, False, True]
 
-    block_mask = [1]*len(model.blocks) if block_mask is None else block_mask    #Apply LoRA to all attention layers if mask is not given.
+    block_mask = (
+        [1] * len(model.blocks) if block_mask is None else block_mask
+    )  # Apply LoRA to all attention layers if mask is not given.
 
     for idx, block in enumerate(lora_model.blocks):
-        if(block_mask[idx] == 1):
+        if block_mask[idx] == 1:
             in_d = block.attn.qkv.in_features
             out_d = block.attn.qkv.out_features
-            block.attn.qkv = lora.MergedLinear(in_d, out_d, r=lora_r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, enable_lora=tune_list)
+            block.attn.qkv = lora.MergedLinear(
+                in_d,
+                out_d,
+                r=lora_r,
+                lora_alpha=lora_alpha,
+                lora_dropout=lora_dropout,
+                enable_lora=tune_list,
+            )
 
-    lora_model.load_state_dict(model.state_dict(),strict=False)
+    lora_model.load_state_dict(model.state_dict(), strict=False)
     lora.mark_only_lora_as_trainable(lora_model)
-    
-    
+
     return lora_model
 
+
 def get_timm_model(encoder, num_classes, **kwargs):
-    '''
+    """
     Returns a timm model for a given encoder.
-    '''
+    """
 
     assert num_classes is not None, "Number of classes cannot be None"
-    
+
     if encoder == "vit_base":
-        model = timm.create_model("vit_base_patch16_224", pretrained=True, num_classes=num_classes,) 
-    elif encoder == 'vit_base_ssl':
-        model = timm.create_model("vit_base_patch16_224_dino", pretrained=True, num_classes=num_classes,)
+        model = timm.create_model(
+            "vit_base_patch16_224",
+            pretrained=True,
+            num_classes=num_classes,
+        )
+    elif encoder == "vit_base_ssl":
+        model = timm.create_model(
+            "vit_base_patch16_224_dino",
+            pretrained=True,
+            num_classes=num_classes,
+        )
     elif encoder == "vit_large":
-        model = timm.create_model("vit_large_patch16_224", pretrained=True, num_classes=num_classes, )
+        model = timm.create_model(
+            "vit_large_patch16_224",
+            pretrained=True,
+            num_classes=num_classes,
+        )
     elif encoder == "vit_huge":
-        model = timm.create_model("vit_huge_patch14_224", pretrained=True, num_classes=num_classes)
+        model = timm.create_model(
+            "vit_huge_patch14_224", pretrained=True, num_classes=num_classes
+        )
 
     return model
 
+
 def get_masked_model(model, method, **kwargs):
-    if(method == 'fullft'):
+    if method == "fullft":
         pass
-    if(method == 'tune_attention'):
+    if method == "tune_attention":
         disable_module(model)
         vector = tune_attention_layers(model)
-    elif(method == 'tune_attention_params_random'):
+    elif method == "tune_attention_params_random":
         disable_module(model)
         vector = tune_attention_params_random(model, kwargs["mask"])
-    elif(method == 'tune_attention_blocks_random'):
+    elif method == "tune_attention_blocks_random":
         disable_module(model)
-        vector = tune_blocks_random(model, kwargs["mask"], segment='attention')
-    elif(method == 'bitfit'):
-        vector = get_model_for_bitfit(model, 'timm')
-    elif(method == 'tune_bitfit_random'):
+        vector = tune_blocks_random(model, kwargs["mask"], segment="attention")
+    elif method == "bitfit":
+        vector = get_model_for_bitfit(model, "timm")
+    elif method == "tune_bitfit_random":
         vector = get_model_bitfit_random(model)
-    elif(method == 'tune_layernorm'):
+    elif method == "tune_layernorm":
         disable_module(model)
         vector = tune_layernorm_layers(model)
-    elif(method == 'tune_layernorm_random'):
+    elif method == "tune_layernorm_random":
         disable_module(model)
         vector = tune_layernorm_random(model)
-    elif(method == 'tune_layernorm_blocks_random'):
+    elif method == "tune_layernorm_blocks_random":
         disable_module(model)
-        vector = tune_blocks_random(model, kwargs["mask"], segment='layernorm')
+        vector = tune_blocks_random(model, kwargs["mask"], segment="layernorm")
     else:
         raise NotImplementedError
 
@@ -348,40 +376,60 @@ def get_masked_model(model, method, **kwargs):
 
     return vector
 
+
 def get_model_from_vector(model, method, vector):
-    if(method == 'tune_attention_blocks_random'):
+    if method == "tune_attention_blocks_random":
         disable_module(model)
         enable_from_vector(vector, model)
 
+
 def create_random_mask(mask_length, generation_method, device, **kwargs):
-    
-    #return np.random.randint(low=0, high=2, size=mask_length)
-    #return nn.Parameter(torch.ones(mask_length).to(device))
-    #return nn.Parameter(torch.randn(low=0, high=2, size=(mask_length,), dtype=torch.float32, requires_grad=True).to(device))
+    # return np.random.randint(low=0, high=2, size=mask_length)
+    # return nn.Parameter(torch.ones(mask_length).to(device))
+    # return nn.Parameter(torch.randn(low=0, high=2, size=(mask_length,), dtype=torch.float32, requires_grad=True).to(device))
 
     # Generate a random mask with values close to 1
-    if(generation_method == 'random'):
-        sigma = kwargs['sigma']
+    if generation_method == "random":
+        sigma = kwargs["sigma"]
         epsilon = 0.05
-        mask = nn.Parameter(1 + sigma * torch.randn(mask_length, dtype=torch.float32, requires_grad=True).to(device))
+        mask = nn.Parameter(
+            1
+            + sigma
+            * torch.randn(mask_length, dtype=torch.float32, requires_grad=True).to(
+                device
+            )
+        )
 
-    elif(generation_method == 'random_gumbel'):
-        sigma = kwargs['sigma']
-        mask = nn.Parameter(0 + sigma * torch.randn(mask_length, dtype=torch.float32, requires_grad=True).to(device))
+    elif generation_method == "random_gumbel":
+        sigma = kwargs["sigma"]
+        mask = nn.Parameter(
+            0
+            + sigma
+            * torch.randn(mask_length, dtype=torch.float32, requires_grad=True).to(
+                device
+            )
+        )
 
-    elif(generation_method == 'constant'):
-        sigma = kwargs['sigma']
-        mask = nn.Parameter(sigma + torch.ones(mask_length, dtype=torch.float32, requires_grad=True).to(device))
-        
-    elif(generation_method == 'searched'):
-        '''
+    elif generation_method == "constant":
+        sigma = kwargs["sigma"]
+        mask = nn.Parameter(
+            sigma
+            + torch.ones(mask_length, dtype=torch.float32, requires_grad=True).to(
+                device
+            )
+        )
+
+    elif generation_method == "searched":
+        """
         Generate a random mask with first and last three values centered around 1 and the rest centered around 0.5
-        '''
-        sigma = kwargs['sigma']
+        """
+        sigma = kwargs["sigma"]
         tensor = torch.zeros(mask_length, dtype=torch.float32)
         tensor[:3] = 1 + sigma * torch.randn(3, dtype=torch.float32)
         tensor[-3:] = 1 + sigma * torch.randn(3, dtype=torch.float32)
-        tensor[3:-3] = 0.5 + 0.1*sigma * torch.randn(mask_length-6, dtype=torch.float32) # Initialize these values with a smaller deviation (sigma)
+        tensor[3:-3] = 0.5 + 0.1 * sigma * torch.randn(
+            mask_length - 6, dtype=torch.float32
+        )  # Initialize these values with a smaller deviation (sigma)
         tensor = tensor.requires_grad_(True).to(device)
         mask = nn.Parameter(tensor)
         # mask = nn.Parameter(torch.zeros(mask_length, dtype=torch.float32, requires_grad=True).to(device))
@@ -396,8 +444,10 @@ def create_random_mask(mask_length, generation_method, device, **kwargs):
     return mask
 
 
-def gumbel_sigmoid(logits: torch.Tensor, tau: float = 1, hard: bool = False, eps: float = 1e-10) -> torch.Tensor:
-    uniform = logits.new_empty([2]+list(logits.shape)).uniform_(0,1)
+def gumbel_sigmoid(
+    logits: torch.Tensor, tau: float = 1, hard: bool = False, eps: float = 1e-10
+) -> torch.Tensor:
+    uniform = logits.new_empty([2] + list(logits.shape)).uniform_(0, 1)
 
     noise = -((uniform[1] + eps).log() / (uniform[0] + eps).log() + eps).log()
     res = torch.sigmoid((logits + noise) / tau)
@@ -406,19 +456,18 @@ def gumbel_sigmoid(logits: torch.Tensor, tau: float = 1, hard: bool = False, eps
         res = ((res > 0.5).type_as(res) - res).detach() + res
 
     return res
-    
 
 
 def plot_changes(fine_tuned_ckpt, base_model, args):
-    '''
+    """
     Plots the changes in different layers of a model
-    '''
+    """
 
-    if(args.model == 'vit_base'):
+    if args.model == "vit_base":
         num_layers = 12
-    if(args.model == 'vit_large'):
+    if args.model == "vit_large":
         num_layers = 24
-    if(args.model == 'vit_huge'):
+    if args.model == "vit_huge":
         num_layers = 32
 
     fine_tuned_model = get_timm_model(args.model, args.num_classes)
@@ -430,28 +479,35 @@ def plot_changes(fine_tuned_ckpt, base_model, args):
         return np.mean(np.abs(np.array(ft_p.data - base_p.data)))
 
     def _get_component_name(name):
-        return re.split(r'.[0-9]+.', name)[1]
+        return re.split(r".[0-9]+.", name)[1]
 
     def _get_component_layer(name):
-        return int(name.split('.')[1])
+        return int(name.split(".")[1])
 
     base_model = base_model.cpu()
-    #fine_tuned_model = base_model.cpu()
+    # fine_tuned_model = base_model.cpu()
     print(fine_tuned_ckpt)
 
     changes = []
     for ft_name, ft_param in fine_tuned_model.named_parameters():
-        if ft_param.requires_grad and ('.attn.' in ft_name or 'attention' in ft_name):
+        if ft_param.requires_grad and (".attn." in ft_name or "attention" in ft_name):
             for base_name, base_param in base_model.named_parameters():
                 if ft_name == base_name:
-                    changes.append({'name': ft_name, 'value': _calc_mean_diff(ft_param, base_param)})
+                    changes.append(
+                        {
+                            "name": ft_name,
+                            "value": _calc_mean_diff(ft_param, base_param),
+                        }
+                    )
 
-    keys = list(set(_get_component_name(c['name']) for c in changes))
+    keys = list(set(_get_component_name(c["name"]) for c in changes))
     keys_mapper = {k: i for i, k in enumerate(keys)}
 
     total_weights = np.zeros(len(keys))
     for change in changes:
-        total_weights[keys_mapper[_get_component_name(change['name'])]] += change['value']
+        total_weights[keys_mapper[_get_component_name(change["name"])]] += change[
+            "value"
+        ]
 
     keys = [keys[i] for i in np.argsort(-total_weights)]
     keys_mapper = {k: i for i, k in enumerate(keys)}
@@ -459,28 +515,38 @@ def plot_changes(fine_tuned_ckpt, base_model, args):
     avg_column = np.zeros(len(keys))
     values_map = np.zeros((len(keys), num_layers + 1))
     for change in changes:
-        avg_column[keys_mapper[_get_component_name(change['name'])]] += change['value']
-        values_map[keys_mapper[_get_component_name(change['name'])], _get_component_layer(change['name'])] = change[
-            'value']
+        avg_column[keys_mapper[_get_component_name(change["name"])]] += change["value"]
+        values_map[
+            keys_mapper[_get_component_name(change["name"])],
+            _get_component_layer(change["name"]),
+        ] = change["value"]
     avg_column /= num_layers
     values_map[:, -1] = avg_column
 
     print(values_map)
 
     fig, ax = plt.subplots(figsize=(num_layers, len(keys)))
-    xticklabels = [f'Layer {i}' for i in range(num_layers)]
-    xticklabels.append('Avg.')
+    xticklabels = [f"Layer {i}" for i in range(num_layers)]
+    xticklabels.append("Avg.")
     yticklabels = keys
-    sns.heatmap(values_map, cmap="Blues", ax=ax, xticklabels=xticklabels, yticklabels=yticklabels)
+    sns.heatmap(
+        values_map,
+        cmap="Blues",
+        ax=ax,
+        xticklabels=xticklabels,
+        yticklabels=yticklabels,
+    )
 
-    filename = args.dataset + '_' + args.tuning_method + '_' + str(vector_idx)
-    plt.savefig(os.path.join(args.fig_savepath, filename + '.png'))
+    filename = args.dataset + "_" + args.tuning_method + "_" + str(vector_idx)
+    plt.savefig(os.path.join(args.fig_savepath, filename + ".png"))
+
 
 # Calibration error scores in the form of loss metrics
 class ECELoss(nn.Module):
-    '''
+    """
     Compute ECE (Expected Calibration Error)
-    '''
+    """
+
     def __init__(self, n_bins=15):
         super(ECELoss, self).__init__()
         bin_boundaries = torch.linspace(0, 1, n_bins + 1)
@@ -556,7 +622,11 @@ class SmoothedValue:
 
     def __str__(self):
         return self.fmt.format(
-            median=self.median, avg=self.avg, global_avg=self.global_avg, max=self.max, value=self.value
+            median=self.median,
+            avg=self.avg,
+            global_avg=self.global_avg,
+            max=self.max,
+            value=self.value,
         )
 
 
@@ -577,7 +647,9 @@ class MetricLogger:
             return self.meters[attr]
         if attr in self.__dict__:
             return self.__dict__[attr]
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{attr}'"
+        )
 
     def __str__(self):
         loss_str = []
@@ -615,7 +687,14 @@ class MetricLogger:
             )
         else:
             log_msg = self.delimiter.join(
-                [header, "[{0" + space_fmt + "}/{1}]", "eta: {eta}", "{meters}", "time: {time}", "data: {data}"]
+                [
+                    header,
+                    "[{0" + space_fmt + "}/{1}]",
+                    "eta: {eta}",
+                    "{meters}",
+                    "time: {time}",
+                    "data: {data}",
+                ]
             )
         MB = 1024.0 * 1024.0
         for obj in iterable:
@@ -640,7 +719,12 @@ class MetricLogger:
                 else:
                     print(
                         log_msg.format(
-                            i, len(iterable), eta=eta_string, meters=str(self), time=str(iter_time), data=str(data_time)
+                            i,
+                            len(iterable),
+                            eta=eta_string,
+                            meters=str(self),
+                            time=str(iter_time),
+                            data=str(data_time),
                         )
                     )
             i += 1
@@ -682,6 +766,7 @@ def accuracy(output, target, topk=(1,)):
             res.append(correct_k * (100.0 / batch_size))
         return res
 
+
 def auc(output, target, **kwargs):
     """Computes the top-1 AUC (Area Under the Curve)"""
     with torch.inference_mode():
@@ -690,26 +775,26 @@ def auc(output, target, **kwargs):
             target = target.max(dim=1)[1]
 
         # Get the predicted probabilities for the positive class (top-1)
-        #pred_probs = torch.softmax(output, dim=1)[:, 0]
+        # pred_probs = torch.softmax(output, dim=1)[:, 0]
         maxk = 1
         _, pred = output.topk(maxk, 1, True, True)
         pred = pred.t().flatten().cpu().numpy()
-        #pred_probs = torch.sigmoid(output).cpu().data.numpy()
+        # pred_probs = torch.sigmoid(output).cpu().data.numpy()
 
         # Convert the tensors to NumPy arrays
         target = target.cpu().data.numpy()
-        #pred_probs = pred_probs.detach().cpu().numpy()
-        #print(pred.shape, target.shape)
+        # pred_probs = pred_probs.detach().cpu().numpy()
+        # print(pred.shape, target.shape)
         # Calculate the AUC using sklearn's roc_auc_score function
-        #fpr, tpr, thresholds = sklm.roc_curve(target, pred_probs, pos_label=1)
-        pos_label = 1 if kwargs['pos_label'] is None else kwargs['pos_label']
+        # fpr, tpr, thresholds = sklm.roc_curve(target, pred_probs, pos_label=1)
+        pos_label = 1 if kwargs["pos_label"] is None else kwargs["pos_label"]
         fpr, tpr, thresholds = sklm.roc_curve(target, pred, pos_label=pos_label)
         auc = sklm.auc(fpr, tpr)
 
         return auc
 
-def roc_auc_score_multiclass(pred_class, actual_class, average = "macro"):
 
+def roc_auc_score_multiclass(pred_class, actual_class, average="macro"):
     with torch.inference_mode():
         batch_size = actual_class.size(0)
         if actual_class.ndim == 2:
@@ -720,21 +805,20 @@ def roc_auc_score_multiclass(pred_class, actual_class, average = "macro"):
     pred_class = pred_class.t().flatten().cpu().numpy()
 
     actual_class = actual_class.cpu().data.numpy()
-    
-    #creating a set of all the unique classes using the actual class list
+
+    # creating a set of all the unique classes using the actual class list
     unique_class = set(actual_class)
     roc_auc_dict = {}
     for per_class in unique_class:
-        
-        #creating a list of all the classes except the current class 
+        # creating a list of all the classes except the current class
         other_class = [x for x in unique_class if x != per_class]
 
-        #marking the current class as 1 and all other classes as 0
+        # marking the current class as 1 and all other classes as 0
         new_actual_class = [0 if x in other_class else 1 for x in actual_class]
         new_pred_class = [0 if x in other_class else 1 for x in pred_class]
 
-        #using the sklearn metrics method to calculate the roc_auc_score
-        roc_auc = sklm.roc_auc_score(new_actual_class, new_pred_class, average = average)
+        # using the sklearn metrics method to calculate the roc_auc_score
+        roc_auc = sklm.roc_auc_score(new_actual_class, new_pred_class, average=average)
         roc_auc_dict[per_class] = roc_auc
 
     return roc_auc_dict
@@ -842,7 +926,9 @@ def average_checkpoints(inputs):
         with open(fpath, "rb") as f:
             state = torch.load(
                 f,
-                map_location=(lambda s, _: torch.serialization.default_restore_location(s, "cpu")),
+                map_location=(
+                    lambda s, _: torch.serialization.default_restore_location(s, "cpu")
+                ),
             )
         # Copies over the settings from the first checkpoint
         if new_state is None:
@@ -927,7 +1013,9 @@ def store_model_weights(model, checkpoint_path, checkpoint_key="model", strict=T
     # and remove unnecessary weights (such as auxiliaries, etc.)
     if checkpoint_key == "model_ema":
         del checkpoint[checkpoint_key]["n_averaged"]
-        torch.nn.modules.utils.consume_prefix_in_state_dict_if_present(checkpoint[checkpoint_key], "module.")
+        torch.nn.modules.utils.consume_prefix_in_state_dict_if_present(
+            checkpoint[checkpoint_key], "module."
+        )
     model.load_state_dict(checkpoint[checkpoint_key], strict=strict)
 
     tmp_path = os.path.join(output_dir, str(model.__hash__()))
@@ -995,7 +1083,9 @@ def set_weight_decay(
                 continue
             is_custom_key = False
             for key in custom_keys:
-                target_name = f"{prefix}.{name}" if prefix != "" and "." in key else name
+                target_name = (
+                    f"{prefix}.{name}" if prefix != "" and "." in key else name
+                )
                 if key == target_name:
                     params[key].append(p)
                     is_custom_key = True
@@ -1015,5 +1105,7 @@ def set_weight_decay(
     param_groups = []
     for key in params:
         if len(params[key]) > 0:
-            param_groups.append({"params": params[key], "weight_decay": params_weight_decay[key]})
+            param_groups.append(
+                {"params": params[key], "weight_decay": params_weight_decay[key]}
+            )
     return param_groups
