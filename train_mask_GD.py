@@ -123,6 +123,8 @@ def main(args):
     print("Creating mask of length: ", mask_length)
     args.mask = utils.create_random_mask(mask_length, args.mask_gen_method, device, sigma=args.sigma)
     initial_mask = args.mask
+
+    
     print("Initial Mask: ", initial_mask)
 
     keys = ['mask_el_'+str(i) for i in range(mask_length)]
@@ -147,7 +149,11 @@ def main(args):
     else:
         threshold = 1.0
     
-    binary_mask = args.mask >= threshold
+    if(args.use_gumbel_sigmoid):
+        binary_mask = gumbel_sigmoid(args.mask, hard=True)
+    else:
+        binary_mask = args.mask >= threshold
+
     binary_mask = binary_mask.long()
 
     BINARY_MASK_DICT = track_mask(binary_mask, BINARY_MASK_DICT)
@@ -229,9 +235,9 @@ def main(args):
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
         if model_ema:
-            test_acc, test_loss = evaluate(model_ema, criterion, ece_criterion, data_loader_test, args=args, device=device, log_suffix="EMA", pos_label=0)
+            test_acc, test_loss, test_auc = evaluate(model_ema, criterion, ece_criterion, data_loader_test, args=args, device=device, log_suffix="EMA", pos_label=0)
         else:
-            test_acc, test_loss = evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device, pos_label=0)
+            test_acc, test_loss, test_auc = evaluate(model, criterion, ece_criterion, data_loader_test, args=args, device=device, pos_label=0)
         return
     
     # INNER LOOP: TRAINING PROCESS HERE
@@ -312,10 +318,15 @@ def main(args):
                     # 3. Update the attention parameters using the update equation
                     for k, weight in enumerate(attn_params):
                         if weight.fast is None:
-                            weight.fast = weight - inner_lr * args.lr_scaler * args.mask[k//4] * grad[k]
+                            if(args.use_gumbel_sigmoid):
+                                weight.fast = weight - inner_lr * args.lr_scaler * gumbel_sigmoid(args.mask[k//4], hard=True) * grad[k]
+                            else:
+                                weight.fast = weight - inner_lr * args.lr_scaler * args.mask[k//4] * grad[k]
                         else:
-                            #attn_params[k] = weight.fast - args.inner_lr * args.mask[k] * grad[k]   
-                            weight.fast = weight.fast - inner_lr * args.lr_scaler * args.mask[k//4] * grad[k]   
+                            if(args.use_gumbel_sigmoid):
+                                weight.fast = weight.fast - inner_lr * args.lr_scaler * gumbel_sigmoid(args.mask[k//4], hard=True) * grad[k] 
+                            else:
+                                weight.fast = weight.fast - inner_lr * args.lr_scaler * args.mask[k//4] * grad[k]   
 
                     # 4. TODO: We might need to clip the mask between 0 and 1
 
@@ -348,20 +359,38 @@ def main(args):
                             wandb.log({"Threshold": threshold})
                     else:
                         threshold = 1.0
-                    
-                    binary_mask = args.mask >= threshold
-                    binary_mask = binary_mask.long()
+
+                    # THRESHOLD THE MASK
+
+                    # if(args.apply_sigmoid_to_mask):
+                    #     # Apply sigmoid to the mask
+                    #     args.mask = torch.sigmoid(args.mask)
+
+                    if(args.use_gumbel_sigmoid):
+                        binary_mask = gumbel_sigmoid(args.mask, hard=True)
+                    else:
+                        binary_mask = args.mask >= threshold
+                        binary_mask = binary_mask.long()
 
                     if(args.wandb_logging):
                         binary_mask_fig_arr = plot_binary_mask(binary_mask)
                         BINARY_MASK_PLOT_ARRAYS.append(binary_mask_fig_arr)
 
                     ## APPLY THE UPDATED MASK
-                    for idx, block in enumerate(model.blocks):
-                        if(binary_mask[idx] == 1):
-                            enable_module(block.attn)
-                        else:
-                            disable_module(block.attn)
+                    # TODO: Implement different methods for applying mask here
+                    if(args.tuning_method == 'tune_attention_blocks_random'):
+                        for idx, block in enumerate(model.blocks):
+                            if(binary_mask[idx] == 1):
+                                enable_module(block.attn)
+                            else:
+                                disable_module(block.attn)
+                    elif(args.tuning_method == 'tune_attention_params_random'):
+                        attn_params = [p for name_p, p in model.named_parameters() if '.attn.' in name_p or 'attention' in name_p]
+                        for idx, p in enumerate(attn_params):
+                            if(binary_mask[idx] == 1):
+                                p.requires_grad = True
+                            else:
+                                p.requires_grad = False
 
                     trainable_params, all_param = check_tunable_params(model, False)
                     trainable_percentage = 100 * trainable_params / all_param
@@ -408,7 +437,11 @@ def main(args):
                     for idx, block in enumerate(model.blocks):
                         enable_module(block.attn)
 
-                    print("MASK: ", args.mask)
+                    if(args.use_gumbel_sigmoid):
+                        print("MASK: ", gumbel_sigmoid(args.mask))
+                    else:
+                        print("MASK: ", args.mask)
+                    
                     MASK_DICT = track_mask(args.mask, MASK_DICT)
                     BINARY_MASK_DICT = track_mask(binary_mask, BINARY_MASK_DICT)
 
@@ -455,7 +488,9 @@ def main(args):
                     checkpoint["scaler"] = scaler.state_dict()
                 #utils.save_on_master(checkpoint, os.path.join(args.output_dir, 'checkpoints', f"model_{epoch}.pth"))7
                 ckpt_path = os.path.join(args.output_dir, 'checkpoints', "meta_checkpoint_" + args.tuning_method + ".pth")
-                utils.save_on_master(checkpoint, ckpt_path)
+
+                if(not args.disable_checkpointing):
+                    utils.save_on_master(checkpoint, ckpt_path)
 
             
 
@@ -501,9 +536,9 @@ def main(args):
         print("Test loss: ", test_loss)
         print("Test AUC: ", test_auc)
 
-        print("Initial Mask: ", initial_mask)
-        print("Final Mask: ", args.mask)
-        print("Difference Mask: ", initial_mask.detach().cpu().numpy() - args.mask.detach().cpu().numpy())
+        # print("Initial Mask: ", initial_mask)
+        # print("Final Mask: ", args.mask)
+        # print("Difference Mask: ", initial_mask.detach().cpu().numpy() - args.mask.detach().cpu().numpy())
 
         # STD for each element in the mask during training
         mask_el_df = pd.DataFrame(columns=['Element', 'Standard Deviation'])
@@ -515,8 +550,18 @@ def main(args):
                 mask_el_table = wandb.Table(dataframe=mask_el_df, allow_mixed_types=True)
                 wandb.log({"Hyper Parameters": mask_el_table})
 
+        mask_el_df2 = pd.DataFrame().from_dict(MASK_DICT)
+        print("Saving Mask Tracking Dataframe at: ", os.path.join(args.fig_savepath, 'Mask_Elements_' + args.tuning_method + '_' + args.model + str(args.outer_lr) + '.csv'))
+        mask_el_df2.to_csv(os.path.join(args.fig_savepath, 'Mask_Elements_' + args.tuning_method + '_' + args.model + '_' + str(args.outer_lr) + '.csv'), index=False)
+
+
         #columns=['Tuning Method','Train Percent','LR Scaler', 'Inner LR', 'Outer LR','Test Acc@1','Vector Path']
-        new_row = ['Dynamic_'+args.tuning_method, np.mean(track_trainable_params), args.lr_scaler, args.lr, args.outer_lr, test_acc, np.nan]
+        if(args.use_gumbel_sigmoid):
+            method_name = 'Dynamic_Gumbel_'+args.tuning_method
+        else:
+            method_name = 'Dynamic_'+args.tuning_method
+
+        new_row = [method_name, np.mean(track_trainable_params), args.lr_scaler, args.lr, args.outer_lr, test_acc, np.nan]
         test_results_df.loc[len(test_results_df)] = new_row
         test_results_df.to_csv(os.path.join(args.output_dir, args.test_results_df), index=False)
     
@@ -554,5 +599,8 @@ if __name__ == "__main__":
     print(hparams_df)
                                     
     args.hparams_df = hparams_df
+
+    if(args.use_gumbel_sigmoid):
+        args.mask_gen_method = 'random_gumbel'
 
     main(args)

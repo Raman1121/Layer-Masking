@@ -365,6 +365,10 @@ def create_random_mask(mask_length, generation_method, device, **kwargs):
         epsilon = 0.05
         mask = nn.Parameter(1 + sigma * torch.randn(mask_length, dtype=torch.float32, requires_grad=True).to(device))
 
+    elif(generation_method == 'random_gumbel'):
+        sigma = kwargs['sigma']
+        mask = nn.Parameter(0 + sigma * torch.randn(mask_length, dtype=torch.float32, requires_grad=True).to(device))
+
     elif(generation_method == 'constant'):
         sigma = kwargs['sigma']
         mask = nn.Parameter(sigma + torch.ones(mask_length, dtype=torch.float32, requires_grad=True).to(device))
@@ -390,6 +394,18 @@ def create_random_mask(mask_length, generation_method, device, **kwargs):
         # mask[3:-3] = 0.5 + sigma * torch.randn(mask_length-6, dtype=torch.float32).to(device)
 
     return mask
+
+
+def gumbel_sigmoid(logits: torch.Tensor, tau: float = 1, hard: bool = False, eps: float = 1e-10) -> torch.Tensor:
+    uniform = logits.new_empty([2]+list(logits.shape)).uniform_(0,1)
+
+    noise = -((uniform[1] + eps).log() / (uniform[0] + eps).log() + eps).log()
+    res = torch.sigmoid((logits + noise) / tau)
+
+    if hard:
+        res = ((res > 0.5).type_as(res) - res).detach() + res
+
+    return res
     
 
 

@@ -112,6 +112,53 @@ def get_attn_params(model):
 
     return attn_params 
 
+def get_fast_params(model, args):
+
+    fast_params = []
+
+    # Get fast parameters from each module
+    if(args.tuning_method == 'tune_attention_blocks_random'):
+        for name, module in model.named_modules():
+            if("_fw" in module.__class__.__name__):
+                for n, param in module.named_parameters():
+                    if('attn' in n):
+                        fast_params.append(param)
+
+    elif(args.tuning_method == 'tune_layernorm_blocks_random'):
+        for name, module in model.named_modules():
+            if("_fw" in module.__class__.__name__):
+                for n, param in module.named_parameters():
+                    if('norm' in n):
+                        fast_params.append(param)
+
+    elif(args.tuning_method == 'tune_blocks_random'):
+        for name, module in model.named_modules():
+            if("_fw" in module.__class__.__name__):
+                for n, param in module.named_parameters():
+                    fast_params.append(param)
+
+    return fast_params
+
+# def get_params(model, args):
+#     params = []
+
+#     if(args.tuning_method == 'tune_attention_blocks_random'):
+#         for n,p in model.named_parameters():
+#             if('attn' in n):
+#                 params.append(p)
+        
+#     elif(args.tuning_method == 'tune_layernorm_blocks_random'):
+#         for n,p in model.named_parameters():
+#             if('norm' in n):
+#                 params.append(p)
+
+#     elif(args.tuning_method == 'tune_blocks_random'):
+#         for n,p in model.named_parameters():
+#             params.append(p)
+
+#     return params
+
+
 def check_trainability(params):
     # Check if all the parameters in the 'params' list are trainable
 
@@ -136,7 +183,7 @@ def track_mask(mask, mask_dict):
     mask = mask.tolist()
 
     for i in range(len(mask_dict)):
-        mask_dict['mask_el_'+str(i)].append(round(mask[i], 3))
+        mask_dict['mask_el_'+str(i)].append(round(mask[i], 6))
 
     return mask_dict
 
@@ -266,20 +313,21 @@ def evaluate(model, criterion, ece_criterion, data_loader, device, args, print_f
 
             acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
             #auc = utils.auc(output, target, pos_label=kwargs['pos_label'])
-            auc_dict = utils.roc_auc_score_multiclass(output, target)
-            auc = sum(auc_dict.keys()) / len(auc_dict)
+            # auc_dict = utils.roc_auc_score_multiclass(output, target)
+            # auc = sum(auc_dict.keys()) / len(auc_dict)
+            auc = 0
 
-            if(args.wandb_logging):
+            # if(args.wandb_logging):
 
-                keys = list(auc_dict.keys())
-                keys = [int(key) for key in keys]
+            #     keys = list(auc_dict.keys())
+            #     keys = [int(key) for key in keys]
                 
-                labels = [args.class_to_idx[key] for key in keys]
-                values = list(auc_dict.values())
+            #     labels = [args.class_to_idx[key] for key in keys]
+            #     values = list(auc_dict.values())
 
-                data = [[x,y] for (x,y) in zip(labels, values)]
-                table = wandb.Table(data=data, columns = ["Classes", "AUC"])
-                wandb.log({"AUC": wandb.plot.line(table, "Classes", "AUC", title="AUC Values")})
+            #     data = [[x,y] for (x,y) in zip(labels, values)]
+            #     table = wandb.Table(data=data, columns = ["Classes", "AUC"])
+            #     wandb.log({"AUC": wandb.plot.line(table, "Classes", "AUC", title="AUC Values")})
 
 
 

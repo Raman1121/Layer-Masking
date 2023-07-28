@@ -183,5 +183,14 @@ def get_args_parser(add_help=True):
         default=0.99,
         type=float,
     )
-
+    parser.add_argument(
+        "--use_gumbel_sigmoid",
+        action="store_true",
+        help="Use sigmoid function to the weight mask",
+    )
+    parser.add_argument(
+        "--disable_checkpointing",
+        action="store_true",
+        help="Disable saving of model checkopints",
+    )
     return parser
