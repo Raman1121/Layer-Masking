@@ -22,6 +22,7 @@ import torch.utils.data
 import torchvision
 import transforms
 import utils
+from data import HAM10000
 from torch.utils.data.sampler import SubsetRandomSampler
 from sampler import RASampler
 from torch import nn
@@ -420,6 +421,164 @@ def evaluate(
     return metric_logger.acc1.global_avg, loss, auc
 
 
+def evaluate_fairness(
+    model,
+    criterion,
+    ece_criterion,
+    data_loader,
+    device,
+    args,
+    print_freq=100,
+    log_suffix="",
+    **kwargs,
+):
+    model.eval()
+
+    if(args.sens_attribute == 'gender'):
+        total_loss_male = 0.0
+        total_loss_female = 0.0
+        num_male = 0
+        num_female = 0
+    elif(args.sens_attribute == 'age'):
+        raise NotImplementedError
+    elif(args.sens_attribute == 'skin_type'):
+        total_loss_type1 = 0.0
+        total_loss_type2 = 0.0
+        total_loss_type3 = 0.0
+        total_loss_type4 = 0.0
+        total_loss_type5 = 0.0
+        total_loss_type6 = 0.0
+        num_type1 = 0
+        num_type2 = 0
+        num_type3 = 0
+        num_type4 = 0
+        num_type5 = 0
+        num_type6 = 0
+
+    metric_logger = utils.MetricLogger(delimiter="  ")
+    header = f"Test: {log_suffix}"
+
+    num_processed_samples = 0
+    with torch.inference_mode():
+        for image, target, sens_attr in metric_logger.log_every(data_loader, print_freq, header):
+            image = image.to(device, non_blocking=True)
+            target = target.to(device, non_blocking=True)
+            #sens_attr = sens_attr.to(device, non_blocking=True)
+
+            output = model(image)
+            loss = criterion(output, target)
+            ece_loss = ece_criterion(output, target)
+
+            if(args.sens_attribute == 'gender'):
+
+                indexes_males = [index for index, gender in enumerate(sens_attr) if gender == 'M']
+                indexes_females = [index for index, gender in enumerate(sens_attr) if gender == 'F']
+                
+                loss_male = [loss[index] for index in indexes_males]
+                loss_female = [loss[index] for index in indexes_females]
+                
+                total_loss_male = sum(loss_male)
+                total_loss_female = sum(loss_female)
+
+                #num_male += torch.sum(sens_attr == 'M').item()
+                #num_female += torch.sum(sens_attr == 'F').item()
+
+                num_male += sens_attr.count('M')
+                num_female += sens_attr.count('F')
+
+                avg_loss_male = total_loss_male / num_male if num_male > 0 else 0.0
+                avg_loss_female = total_loss_female / num_female if num_female > 0 else 0.0
+
+                # Take the maximum of the two losses
+                max_val_loss = max(avg_loss_male, avg_loss_female)
+                diff_loss = torch.abs(avg_loss_male - avg_loss_female)
+
+            elif(args.sens_attribute == 'age'):
+                raise NotImplementedError
+            elif(args.sens_attribute == 'skin_type'):
+                loss_type1 = torch.mean(loss[sens_attr == 0])
+                loss_type2 = torch.mean(loss[sens_attr == 1])
+                loss_type3 = torch.mean(loss[sens_attr == 2])
+                loss_type4 = torch.mean(loss[sens_attr == 3])
+                loss_type5 = torch.mean(loss[sens_attr == 4])
+                loss_type6 = torch.mean(loss[sens_attr == 5])
+
+                total_loss_type1 += loss_type1.item()
+                total_loss_type2 += loss_type2.item()
+                total_loss_type3 += loss_type3.item()
+                total_loss_type4 += loss_type4.item()
+                total_loss_type5 += loss_type5.item()
+                total_loss_type6 += loss_type6.item()
+
+                num_type1 += torch.sum(sens_attr == 0).item()
+                num_type2 += torch.sum(sens_attr == 1).item()
+                num_type3 += torch.sum(sens_attr == 2).item()
+                num_type4 += torch.sum(sens_attr == 3).item()
+                num_type5 += torch.sum(sens_attr == 4).item()
+                num_type6 += torch.sum(sens_attr == 5).item()
+
+                total_losses = [total_loss_type1, total_loss_type2, total_loss_type3, total_loss_type4, total_loss_type5, total_loss_type6]
+                num_samples = [num_type1, num_type2, num_type3, num_type4, num_type5, num_type6]
+
+                avg_losses = []
+                for total_loss, num in zip(total_losses, num_samples):
+                    avg_loss = total_loss / num if num > 0 else 0.0
+                    avg_losses.append(avg_loss)
+
+                avg_loss_type1 = avg_losses[0]
+                avg_loss_type2 = avg_losses[1]
+                avg_loss_type3 = avg_losses[2]
+                avg_loss_type4 = avg_losses[3]
+                avg_loss_type5 = avg_losses[4]
+                avg_loss_type6 = avg_losses[5]
+
+                # Take the maximum of all the losses
+                max_val_loss = max(avg_loss_type1, avg_loss_type2, avg_loss_type3, avg_loss_type4, avg_loss_type5, avg_loss_type6)
+                
+                # Take the difference between the greatest and the smallest loss
+                min_val_loss = min(avg_loss_type1, avg_loss_type2, avg_loss_type3, avg_loss_type4, avg_loss_type5, avg_loss_type6)
+                diff_loss = torch.abs(max_val_loss - min_val_loss)
+
+
+            acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
+            auc = 0                
+
+
+            batch_size = image.shape[0]
+            metric_logger.update(loss=torch.mean(loss).item())
+            metric_logger.update(ece_loss=ece_loss.item())
+            metric_logger.update(max_val_loss=max_val_loss)
+            metric_logger.update(diff_loss=diff_loss)
+            metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
+            metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+            metric_logger.meters["auc"].update(auc, n=batch_size)
+            metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
+            metric_logger.meters["diff_loss"].update(diff_loss, n=batch_size)
+            num_processed_samples += batch_size
+    
+    # gather the stats from all processes
+    num_processed_samples = utils.reduce_across_processes(num_processed_samples)
+    if (
+        hasattr(data_loader.dataset, "__len__")
+        and len(data_loader.dataset) != num_processed_samples
+        and torch.distributed.get_rank() == 0
+    ):
+        # See FIXME above
+        warnings.warn(
+            f"It looks like the dataset has {len(data_loader.dataset)} samples, but {num_processed_samples} "
+            "samples were used for the validation, which might bias the results. "
+            "Try adjusting the batch size and / or the world size. "
+            "Setting the world size to 1 is always a safe bet."
+        )
+
+    metric_logger.synchronize_between_processes()
+
+    print(
+        f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f} Max Loss {metric_logger.max_val_loss.global_avg:.3f} Diff Loss {metric_logger.diff_loss.global_avg:.3f}"
+    )
+    return metric_logger.acc1.global_avg, loss, max_val_loss
+
+
 def _get_cache_path(filepath):
     import hashlib
 
@@ -608,6 +767,97 @@ def load_data(traindir, valdir, testdir, args):
         test_sampler,
     )
 
+def load_fairness_data(args, df, df_val, df_test):
+    print("Loading fairness data")
+    val_resize_size, val_crop_size, train_crop_size = (
+        args.val_resize_size,
+        args.val_crop_size,
+        args.train_crop_size,
+    )
+    interpolation = InterpolationMode(args.interpolation)
+
+    print("Loading training data")
+    st = time.time()
+
+    if args.cache_dataset and os.path.exists(cache_path):
+        # Attention, as the transforms are also cached!
+        print(f"Loading dataset_train from {cache_path}")
+        dataset, _ = torch.load(cache_path)
+    else:
+        # We need a default value for the variables below because args may come
+        # from train_quantization.py which doesn't define them.
+        auto_augment_policy = getattr(args, "auto_augment", None)
+        random_erase_prob = getattr(args, "random_erase", 0.0)
+        ra_magnitude = getattr(args, "ra_magnitude", None)
+        augmix_severity = getattr(args, "augmix_severity", None)
+
+        print("auto_augment_policy: ", auto_augment_policy)
+        print("random_erase_prob: ", random_erase_prob)
+        print("ra_magnitude: ", ra_magnitude)
+        print("augmix_severity: ", augmix_severity)
+
+        transform = presets.ClassificationPresetTrain(
+            crop_size=train_crop_size,
+            interpolation=interpolation,
+            auto_augment_policy=auto_augment_policy,
+            random_erase_prob=random_erase_prob,
+            ra_magnitude=ra_magnitude,
+            augmix_severity=augmix_severity,
+        )
+
+        if(args.dataset == 'HAM10000'):
+            dataset = HAM10000.HAM10000Dataset(df, transform)
+        else:
+            raise NotImplementedError
+        
+    print("Took", time.time() - st)
+    print("Loading validation and test data")
+
+    if args.cache_dataset and os.path.exists(cache_path):
+        # Attention, as the transforms are also cached!
+        print(f"Loading dataset_val from {cache_path}")
+        dataset_val, _ = torch.load(cache_path)
+    else:
+        if args.weights and args.test_only:
+            weights = torchvision.models.get_weight(args.weights)
+            transform_eval = weights.transforms()
+        else:
+            transform_eval = presets.ClassificationPresetEval(
+                crop_size=val_crop_size,
+                resize_size=val_resize_size,
+                interpolation=interpolation,
+            )
+        dataset_val = HAM10000.HAM10000Dataset(df_val, transform_eval)
+        dataset_test = HAM10000.HAM10000Dataset(df_test, transform_eval)
+
+    print("Creating data loaders")
+
+    if args.distributed:
+        if hasattr(args, "ra_sampler") and args.ra_sampler:
+            train_sampler = RASampler(dataset, shuffle=True, repetitions=args.ra_reps)
+        else:
+            train_sampler = torch.utils.data.distributed.DistributedSampler(dataset)
+        valid_sampler = torch.utils.data.distributed.DistributedSampler(
+            dataset_val, shuffle=False
+        )
+        test_sampler = torch.utils.data.distributed.DistributedSampler(
+            dataset_test, shuffle=False
+        )
+
+    else:
+        train_sampler = torch.utils.data.RandomSampler(dataset)
+        valid_sampler = torch.utils.data.RandomSampler(dataset_val)
+        test_sampler = torch.utils.data.RandomSampler(dataset_test)
+
+    return (
+        dataset,
+        dataset_val,
+        dataset_test,
+        train_sampler,
+        valid_sampler,
+        test_sampler,
+    )
+
 
 def get_optimizer(args, parameters, meta=False):
     opt_name = args.opt.lower()
@@ -756,3 +1006,31 @@ def get_data(args):
     ) = load_data(train_dir, val_dir, test_dir, args)
 
     return dataset, dataset_val, dataset_test, train_sampler, val_sampler, test_sampler
+
+def get_fairness_data(args, yaml_data):
+
+    train_csv_path = yaml_data['data'][args.dataset]["train_csv"]
+    val_csv_path = yaml_data['data'][args.dataset]["val_csv"]
+    test_csv_path = yaml_data['data'][args.dataset]["test_csv"]
+    img_path = yaml_data['data'][args.dataset]["root_path"]
+
+    train_df = pd.read_csv(train_csv_path)
+    val_df = pd.read_csv(val_csv_path)
+    test_df = pd.read_csv(test_csv_path)
+
+    train_df['Path'] = train_df['Path'].apply(lambda x: os.path.join(img_path, x))
+    val_df['Path'] = val_df['Path'].apply(lambda x: os.path.join(img_path, x))
+    test_df['Path'] = test_df['Path'].apply(lambda x: os.path.join(img_path, x))
+
+    (
+        dataset,
+        dataset_val,
+        dataset_test,
+        train_sampler,
+        val_sampler,
+        test_sampler,
+    ) = load_fairness_data(args, train_df, val_df, test_df)
+    
+
+    return dataset, dataset_val, dataset_test, train_sampler, val_sampler, test_sampler
+

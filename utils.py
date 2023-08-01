@@ -35,6 +35,15 @@ def enable_module(module):
     for p in module.parameters():
         p.requires_grad = True
 
+def read_numpy_from_cmd(args):
+    mask_str = args.masking_vector
+    mask = np.array(args.masking_vector)
+    return mask
+
+def convert_numpy_array_to_string(mask):
+    mask_string = np.array2string(mask, separator=', ', formatter={'all': lambda x: f'{int(x)}'})
+    return mask_string
+
 
 def check_tunable_params(model, verbose=True):
     """

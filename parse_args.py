@@ -292,6 +292,12 @@ def get_args_parser(add_help=True):
         help="Type of fine-tuning method to use",
     )
     parser.add_argument("--masking_vector_idx", type=int, default=None)
+
+    parser.add_argument('--masking_vector', metavar='N', type=float, nargs='+',
+                        help='Elements of the masking vector')
+    
+    parser.add_argument("--subnetwork_mask_name", type=str, default=None)
+    
     parser.add_argument(
         "--exp_vector_path",
         type=str,
@@ -344,4 +350,11 @@ def get_args_parser(add_help=True):
         action="store_true",
         help="To disable/ skip the training process.",
     )
+
+    # FAIRNESS Arguements
+    parser.add_argument('--sens_attribute',
+                        type=str,
+                        default='gender',
+                        help='Sensitive attribute to be used for fairness')
+
     return parser
