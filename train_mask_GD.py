@@ -429,6 +429,7 @@ def main(args):
 
                     # OUTER LOOP: META TRAINING (THIS SHOULD BE ON VALIDATION DATA) - TRAINING THE META PARAMS (MASK)
                     output = model(image_val)
+
                     meta_loss = criterion(output, target_val)
 
                     if args.wandb_logging:
@@ -472,9 +473,9 @@ def main(args):
                         binary_mask = args.mask >= threshold
                         binary_mask = binary_mask.long()
 
-                    if args.wandb_logging:
-                        binary_mask_fig_arr = plot_binary_mask(binary_mask)
-                        BINARY_MASK_PLOT_ARRAYS.append(binary_mask_fig_arr)
+                    # if args.wandb_logging:
+                    #     binary_mask_fig_arr = plot_binary_mask(binary_mask)
+                    #     BINARY_MASK_PLOT_ARRAYS.append(binary_mask_fig_arr)
 
                     ## APPLY THE UPDATED MASK
                     # TODO: Implement different methods for applying mask here
@@ -499,18 +500,6 @@ def main(args):
                     trainable_params, all_param = check_tunable_params(model, False)
                     trainable_percentage = 100 * trainable_params / all_param
                     track_trainable_params.append(trainable_percentage)
-
-                    if args.wandb_logging:
-                        wandb.log({"Trainable Percentage": track_trainable_params[-1]})
-
-                    if args.wandb_logging:
-                        # Separately log every element of the mask vector to wandb
-                        temp_mask = args.mask.detach().cpu().numpy()
-
-                        for i in range(len(args.mask)):
-                            wandb.log(
-                                {"Mask Parameter {}".format(str(i)): temp_mask[i]}
-                            )
 
                         # x = np.arange(len(temp_mask))
                         # for i, value in enumerate(temp_mask):
@@ -554,26 +543,11 @@ def main(args):
                     for idx, block in enumerate(model.blocks):
                         enable_module(block.attn)
 
-                    if args.use_gumbel_sigmoid:
-                        print("MASK: ", gumbel_sigmoid(args.mask))
-                    else:
-                        print("MASK: ", args.mask)
-
-                    MASK_DICT = track_mask(args.mask, MASK_DICT)
-                    BINARY_MASK_DICT = track_mask(binary_mask, BINARY_MASK_DICT)
-
-                    if args.wandb_logging:
-                        # _df_mask = pd.DataFrame(MASK_DICT)
-                        _df_binary_mask = pd.DataFrame(BINARY_MASK_DICT)
-                        # table = wandb.Table(dataframe=_df_mask)
-
-                        binary_table = wandb.Table(dataframe=_df_binary_mask)
-
-                        # wandb.log({"Mask Params": table, "Binary Mask Params": binary_table})
-                        # wandb.log({"Mask Params": table})
-                        wandb.log({"Mask Params": binary_table})
-
-                    print("\n")
+                    # if args.use_gumbel_sigmoid:
+                    #     print("MASK: ", gumbel_sigmoid(args.mask))
+                    # else:
+                    #     print("MASK: ", args.mask)
+                    
 
                 acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
                 batch_size = image.shape[0]
@@ -588,6 +562,42 @@ def main(args):
                 metric_logger.meters["img/s"].update(
                     batch_size / (time.time() - start_time)
                 )
+
+            ############################ Logging at epoch level ############################
+            
+            print("\n")
+            print("############################ EPOCH FINISHED ############################")
+
+            print("Mean Trainable Percentage: ", np.mean(track_trainable_params))
+
+            if args.wandb_logging:
+                wandb.log({"Mean Trainable Percentage": np.mean(track_trainable_params)})
+
+            # if args.wandb_logging:
+            #     # Separately log every element of the mask vector to wandb
+            #     temp_mask = args.mask.detach().cpu().numpy()
+
+            #     for i in range(len(args.mask)):
+            #         wandb.log(
+            #             {"Mask Parameter {}".format(str(i)): temp_mask[i]}
+            #         )
+
+            if args.wandb_logging:
+                
+                _df_binary_mask = pd.DataFrame(BINARY_MASK_DICT)
+                binary_table = wandb.Table(dataframe=_df_binary_mask)
+                wandb.log({"Mask Params": binary_table})
+
+            if args.use_gumbel_sigmoid:
+                print("MASK: ", gumbel_sigmoid(args.mask))
+                print("Binary Mask", gumbel_sigmoid(args.mask, hard=True))
+            else:
+                print("MASK: ", args.mask)
+
+            print("\n")
+
+            MASK_DICT = track_mask(args.mask, MASK_DICT)
+            BINARY_MASK_DICT = track_mask(binary_mask, BINARY_MASK_DICT)
 
             lr_scheduler_inner.step()
 
@@ -670,6 +680,7 @@ def main(args):
         print("Val loss: ", val_loss)
         print("Val AUC: ", val_auc)
 
+        
         test_acc, test_loss, test_auc = evaluate(
             model,
             criterion,
@@ -682,6 +693,8 @@ def main(args):
         print("Test accuracy: ", test_acc)
         print("Test loss: ", test_loss)
         print("Test AUC: ", test_auc)
+
+        
 
         # print("Initial Mask: ", initial_mask)
         # print("Final Mask: ", args.mask)
@@ -746,6 +759,14 @@ def main(args):
             os.path.join(args.output_dir, args.test_results_df), index=False
         )
 
+        print("Saving Binary Vector at: ", args.binary_mask_savepath)
+        #Making the directory if it doesn't exist
+        if not os.path.exists(args.binary_mask_savepath):
+            os.makedirs(args.binary_mask_savepath)
+        mask_name = "test_acc_{:.2f}_outerlr_{:.4f}_scaler_{}".format(test_acc, args.outer_lr, int(args.lr_scaler)) + ".npy"
+        np.save(os.path.join(args.binary_mask_savepath, mask_name), gumbel_sigmoid(args.mask, hard=True).detach().cpu().numpy())
+
+
 
 if __name__ == "__main__":
     args = get_args_parser().parse_args()
@@ -762,6 +783,13 @@ if __name__ == "__main__":
         args.model,
         args.dataset,
         args.tuning_method + "_" + str(args.lr),
+    )
+    args.binary_mask_savepath = os.path.join(
+        current_wd,
+        "Saved_Binary_Vectors_Subnetwork",
+        args.model,
+        args.dataset,
+        args.tuning_method,
     )
     args.fig_savepath = os.path.join(args.output_dir, "plots/")
 
