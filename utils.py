@@ -775,6 +775,48 @@ def accuracy(output, target, topk=(1,)):
             res.append(correct_k * (100.0 / batch_size))
         return res
 
+def accuracy_by_gender(output, target, sens_attribute, topk=(1,)):
+    """Computes the accuracy over the k top predictions for the specified values of k
+       for the whole dataset, male population, and female population separately.
+    """
+    with torch.inference_mode():
+        maxk = max(topk)
+        batch_size = target.size(0)
+        if target.ndim == 2:
+            target = target.max(dim=1)[1]
+
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target[None])
+
+        # Calculate accuracy for the whole dataset
+        res = []
+        for k in topk:
+            correct_k = correct[:k].flatten().sum(dtype=torch.float32)
+            res.append(correct_k * (100.0 / batch_size))
+
+        # Calculate accuracy for the male population
+        male_indices = [i for i, gender in enumerate(sens_attribute) if gender == 'M']
+        male_correct = correct[:, male_indices]
+        # correct[male_indices]
+
+        res_male = []
+        for k in topk:
+            correct_k = male_correct[:k].flatten().sum(dtype=torch.float32)
+            res_male.append(correct_k * (100.0 / len(male_indices)))
+
+        # Calculate accuracy for the female population
+        female_indices = [i for i, gender in enumerate(sens_attribute) if gender == 'F']
+        female_correct = correct[:, female_indices]
+        # correct[female_indices]
+        
+        res_female = []
+        for k in topk:
+            correct_k = female_correct[:k].flatten().sum(dtype=torch.float32)
+            res_female.append(correct_k * (100.0 / len(female_indices)))
+
+        return res, res_male, res_female
+
 
 def auc(output, target, **kwargs):
     """Computes the top-1 AUC (Area Under the Curve)"""

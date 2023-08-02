@@ -421,7 +421,7 @@ def evaluate(
     return metric_logger.acc1.global_avg, loss, auc
 
 
-def evaluate_fairness(
+def evaluate_fairness_gender(
     model,
     criterion,
     ece_criterion,
@@ -432,28 +432,16 @@ def evaluate_fairness(
     log_suffix="",
     **kwargs,
 ):
+    print("EVALUATING")
     model.eval()
+    
+    assert args.sens_attribute == 'gender'
 
-    if(args.sens_attribute == 'gender'):
-        total_loss_male = 0.0
-        total_loss_female = 0.0
-        num_male = 0
-        num_female = 0
-    elif(args.sens_attribute == 'age'):
-        raise NotImplementedError
-    elif(args.sens_attribute == 'skin_type'):
-        total_loss_type1 = 0.0
-        total_loss_type2 = 0.0
-        total_loss_type3 = 0.0
-        total_loss_type4 = 0.0
-        total_loss_type5 = 0.0
-        total_loss_type6 = 0.0
-        num_type1 = 0
-        num_type2 = 0
-        num_type3 = 0
-        num_type4 = 0
-        num_type5 = 0
-        num_type6 = 0
+
+    total_loss_male = 0.0
+    total_loss_female = 0.0
+    num_male = 0
+    num_female = 0
 
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = f"Test: {log_suffix}"
@@ -469,78 +457,33 @@ def evaluate_fairness(
             loss = criterion(output, target)
             ece_loss = ece_criterion(output, target)
 
-            if(args.sens_attribute == 'gender'):
+            indexes_males = [index for index, gender in enumerate(sens_attr) if gender == 'M']
+            indexes_females = [index for index, gender in enumerate(sens_attr) if gender == 'F']
+            
+            loss_male = [loss[index] for index in indexes_males]
+            loss_female = [loss[index] for index in indexes_females]
+            
+            total_loss_male = sum(loss_male)
+            total_loss_female = sum(loss_female)
 
-                indexes_males = [index for index, gender in enumerate(sens_attr) if gender == 'M']
-                indexes_females = [index for index, gender in enumerate(sens_attr) if gender == 'F']
-                
-                loss_male = [loss[index] for index in indexes_males]
-                loss_female = [loss[index] for index in indexes_females]
-                
-                total_loss_male = sum(loss_male)
-                total_loss_female = sum(loss_female)
+            #num_male += torch.sum(sens_attr == 'M').item()
+            #num_female += torch.sum(sens_attr == 'F').item()
 
-                #num_male += torch.sum(sens_attr == 'M').item()
-                #num_female += torch.sum(sens_attr == 'F').item()
+            num_male += sens_attr.count('M')
+            num_female += sens_attr.count('F')
 
-                num_male += sens_attr.count('M')
-                num_female += sens_attr.count('F')
+            avg_loss_male = total_loss_male / num_male if num_male > 0 else 0.0
+            avg_loss_female = total_loss_female / num_female if num_female > 0 else 0.0
 
-                avg_loss_male = total_loss_male / num_male if num_male > 0 else 0.0
-                avg_loss_female = total_loss_female / num_female if num_female > 0 else 0.0
+            # Take the maximum of the two losses
+            max_val_loss = max(avg_loss_male, avg_loss_female)
+            diff_loss = torch.abs(avg_loss_male - avg_loss_female)
+            acc1, acc_male, acc_female = utils.accuracy_by_gender(output, target, sens_attr, topk=(1,))
+            acc1 = acc1[0]
+            acc_male = acc_male[0]
+            acc_female = acc_female[0]
 
-                # Take the maximum of the two losses
-                max_val_loss = max(avg_loss_male, avg_loss_female)
-                diff_loss = torch.abs(avg_loss_male - avg_loss_female)
-
-            elif(args.sens_attribute == 'age'):
-                raise NotImplementedError
-            elif(args.sens_attribute == 'skin_type'):
-                loss_type1 = torch.mean(loss[sens_attr == 0])
-                loss_type2 = torch.mean(loss[sens_attr == 1])
-                loss_type3 = torch.mean(loss[sens_attr == 2])
-                loss_type4 = torch.mean(loss[sens_attr == 3])
-                loss_type5 = torch.mean(loss[sens_attr == 4])
-                loss_type6 = torch.mean(loss[sens_attr == 5])
-
-                total_loss_type1 += loss_type1.item()
-                total_loss_type2 += loss_type2.item()
-                total_loss_type3 += loss_type3.item()
-                total_loss_type4 += loss_type4.item()
-                total_loss_type5 += loss_type5.item()
-                total_loss_type6 += loss_type6.item()
-
-                num_type1 += torch.sum(sens_attr == 0).item()
-                num_type2 += torch.sum(sens_attr == 1).item()
-                num_type3 += torch.sum(sens_attr == 2).item()
-                num_type4 += torch.sum(sens_attr == 3).item()
-                num_type5 += torch.sum(sens_attr == 4).item()
-                num_type6 += torch.sum(sens_attr == 5).item()
-
-                total_losses = [total_loss_type1, total_loss_type2, total_loss_type3, total_loss_type4, total_loss_type5, total_loss_type6]
-                num_samples = [num_type1, num_type2, num_type3, num_type4, num_type5, num_type6]
-
-                avg_losses = []
-                for total_loss, num in zip(total_losses, num_samples):
-                    avg_loss = total_loss / num if num > 0 else 0.0
-                    avg_losses.append(avg_loss)
-
-                avg_loss_type1 = avg_losses[0]
-                avg_loss_type2 = avg_losses[1]
-                avg_loss_type3 = avg_losses[2]
-                avg_loss_type4 = avg_losses[3]
-                avg_loss_type5 = avg_losses[4]
-                avg_loss_type6 = avg_losses[5]
-
-                # Take the maximum of all the losses
-                max_val_loss = max(avg_loss_type1, avg_loss_type2, avg_loss_type3, avg_loss_type4, avg_loss_type5, avg_loss_type6)
-                
-                # Take the difference between the greatest and the smallest loss
-                min_val_loss = min(avg_loss_type1, avg_loss_type2, avg_loss_type3, avg_loss_type4, avg_loss_type5, avg_loss_type6)
-                diff_loss = torch.abs(max_val_loss - min_val_loss)
-
-
-            acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
+            acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
             auc = 0                
 
 
@@ -550,6 +493,8 @@ def evaluate_fairness(
             metric_logger.update(max_val_loss=max_val_loss)
             metric_logger.update(diff_loss=diff_loss)
             metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
+            metric_logger.meters["acc1_male"].update(acc_male.item(), n=batch_size)
+            metric_logger.meters["acc1_female"].update(acc_female.item(), n=batch_size)
             metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
             metric_logger.meters["auc"].update(auc, n=batch_size)
             metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
@@ -576,7 +521,141 @@ def evaluate_fairness(
     print(
         f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f} Max Loss {metric_logger.max_val_loss.global_avg:.3f} Diff Loss {metric_logger.diff_loss.global_avg:.3f}"
     )
-    return metric_logger.acc1.global_avg, loss, max_val_loss
+
+    acc_avg = metric_logger.acc1.global_avg
+    male_acc_avg = metric_logger.acc1_male.global_avg
+    female_acc_avg = metric_logger.acc1_female.global_avg
+    
+    return acc_avg, male_acc_avg, female_acc_avg, loss, max_val_loss
+
+def evaluate_fairness_skin_type(
+    model,
+    criterion,
+    ece_criterion,
+    data_loader,
+    device,
+    args,
+    print_freq=100,
+    log_suffix="",
+    **kwargs,
+):
+    print("EVALUATING")
+    model.eval()
+
+    assert args.sens_attribute == 'skin_type'
+    
+    total_loss_type1 = 0.0
+    total_loss_type2 = 0.0
+    total_loss_type3 = 0.0
+    total_loss_type4 = 0.0
+    total_loss_type5 = 0.0
+    total_loss_type6 = 0.0
+    num_type1 = 0
+    num_type2 = 0
+    num_type3 = 0
+    num_type4 = 0
+    num_type5 = 0
+    num_type6 = 0
+
+    metric_logger = utils.MetricLogger(delimiter="  ")
+    header = f"Test: {log_suffix}"
+
+    num_processed_samples = 0
+    with torch.inference_mode():
+        for image, target, sens_attr in metric_logger.log_every(data_loader, print_freq, header):
+            image = image.to(device, non_blocking=True)
+            target = target.to(device, non_blocking=True)
+            #sens_attr = sens_attr.to(device, non_blocking=True)
+
+            output = model(image)
+            loss = criterion(output, target)
+            ece_loss = ece_criterion(output, target)
+
+            loss_type1 = torch.mean(loss[sens_attr == 0])
+            loss_type2 = torch.mean(loss[sens_attr == 1])
+            loss_type3 = torch.mean(loss[sens_attr == 2])
+            loss_type4 = torch.mean(loss[sens_attr == 3])
+            loss_type5 = torch.mean(loss[sens_attr == 4])
+            loss_type6 = torch.mean(loss[sens_attr == 5])
+
+            total_loss_type1 += loss_type1.item()
+            total_loss_type2 += loss_type2.item()
+            total_loss_type3 += loss_type3.item()
+            total_loss_type4 += loss_type4.item()
+            total_loss_type5 += loss_type5.item()
+            total_loss_type6 += loss_type6.item()
+
+            num_type1 += torch.sum(sens_attr == 0).item()
+            num_type2 += torch.sum(sens_attr == 1).item()
+            num_type3 += torch.sum(sens_attr == 2).item()
+            num_type4 += torch.sum(sens_attr == 3).item()
+            num_type5 += torch.sum(sens_attr == 4).item()
+            num_type6 += torch.sum(sens_attr == 5).item()
+
+            total_losses = [total_loss_type1, total_loss_type2, total_loss_type3, total_loss_type4, total_loss_type5, total_loss_type6]
+            num_samples = [num_type1, num_type2, num_type3, num_type4, num_type5, num_type6]
+
+            avg_losses = []
+            for total_loss, num in zip(total_losses, num_samples):
+                avg_loss = total_loss / num if num > 0 else 0.0
+                avg_losses.append(avg_loss)
+
+            avg_loss_type1 = avg_losses[0]
+            avg_loss_type2 = avg_losses[1]
+            avg_loss_type3 = avg_losses[2]
+            avg_loss_type4 = avg_losses[3]
+            avg_loss_type5 = avg_losses[4]
+            avg_loss_type6 = avg_losses[5]
+
+            # Take the maximum of all the losses
+            max_val_loss = max(avg_loss_type1, avg_loss_type2, avg_loss_type3, avg_loss_type4, avg_loss_type5, avg_loss_type6)
+            
+            # Take the difference between the greatest and the smallest loss
+            min_val_loss = min(avg_loss_type1, avg_loss_type2, avg_loss_type3, avg_loss_type4, avg_loss_type5, avg_loss_type6)
+            diff_loss = torch.abs(max_val_loss - min_val_loss)
+            
+            #TODO: Use a different function here
+            #acc1, acc_male, acc_female = utils.accuracy_by_gender(output, target, sens_attr, topk=(1,))
+
+            acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
+            auc = 0                
+
+            batch_size = image.shape[0]
+            metric_logger.update(loss=torch.mean(loss).item())
+            metric_logger.update(ece_loss=ece_loss.item())
+            metric_logger.update(max_val_loss=max_val_loss)
+            metric_logger.update(diff_loss=diff_loss)
+            metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
+            #metric_logger.meters["acc1_male"].update(acc_male.item(), n=batch_size)
+            #metric_logger.meters["acc1_female"].update(acc_female.item(), n=batch_size)
+            metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+            metric_logger.meters["auc"].update(auc, n=batch_size)
+            metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
+            metric_logger.meters["diff_loss"].update(diff_loss, n=batch_size)
+            num_processed_samples += batch_size
+    
+    # gather the stats from all processes
+    num_processed_samples = utils.reduce_across_processes(num_processed_samples)
+    if (
+        hasattr(data_loader.dataset, "__len__")
+        and len(data_loader.dataset) != num_processed_samples
+        and torch.distributed.get_rank() == 0
+    ):
+        # See FIXME above
+        warnings.warn(
+            f"It looks like the dataset has {len(data_loader.dataset)} samples, but {num_processed_samples} "
+            "samples were used for the validation, which might bias the results. "
+            "Try adjusting the batch size and / or the world size. "
+            "Setting the world size to 1 is always a safe bet."
+        )
+
+    metric_logger.synchronize_between_processes()
+
+    print(
+        f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f} Max Loss {metric_logger.max_val_loss.global_avg:.3f} Diff Loss {metric_logger.diff_loss.global_avg:.3f}"
+    )
+    #return metric_logger.acc1.global_avg, loss, max_val_loss, metric_logger.acc1_male.global_avg, metric_logger.acc1_female.global_avg
+    #TODO: Use a different return statement here
 
 
 def _get_cache_path(filepath):

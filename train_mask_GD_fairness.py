@@ -71,17 +71,22 @@ def main(args):
                 "Vector Path",
             ]
         )
-        test_results_df = pd.DataFrame(
-            columns=[
-                "Tuning Method",
-                "Train Percent",
-                "LR Scaler",
-                "Inner LR",
-                "Outer LR",
-                "Test Acc@1",
-                "Vector Path",
-            ]
-        )
+        if(args.sens_attribute == 'gender'):
+            test_results_df = pd.DataFrame(
+                    columns=[
+                        "Tuning Method",
+                        "Train Percent",
+                        "LR Scaler",
+                        "Inner LR",
+                        "Outer LR",
+                        "Test Acc@1",
+                        "Test Acc Male",
+                        "Test Acc Female",
+                        "Test Acc Difference",
+                    ]
+                )
+        else:
+            raise NotImplementedError
 
     utils.init_distributed_mode(args)
     print(args)
@@ -175,7 +180,7 @@ def main(args):
     initial_mask = args.mask
 
     print("Initial Mask: ", initial_mask)
-
+    
     keys = ["mask_el_" + str(i) for i in range(mask_length)]
     values = [[] for i in range(mask_length)]
     MASK_DICT = {
@@ -206,6 +211,7 @@ def main(args):
         binary_mask = gumbel_sigmoid(args.mask, hard=True)
     else:
         binary_mask = args.mask >= threshold
+    print("Initial Binary Mask: ", binary_mask)
 
     binary_mask = binary_mask.long()
 
@@ -214,9 +220,12 @@ def main(args):
     BINARY_MASK_PLOT_ARRAYS.append(binary_mask_fig_arr)
 
     # Disabling all parameters except attention
-    for name, param in model.named_parameters():
-        if "attn" not in name:
-            param.requires_grad = False
+    if("attention" in args.tuning_method):
+        for name, param in model.named_parameters():
+            if "attn" not in name:
+                param.requires_grad = False
+    else:
+        raise NotImplementedError
 
     enable_module(model.head)
 
@@ -292,26 +301,36 @@ def main(args):
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
         if model_ema:
-            test_acc, test_loss, test_auc = evaluate_fairness(
-                model_ema,
-                criterion,
-                ece_criterion,
-                data_loader_test,
-                args=args,
-                device=device,
-                log_suffix="EMA",
-                pos_label=0,
-            )
+            if(args.sens_attribute == 'gender'):
+                test_acc, test_male_acc, test_female_acc, test_loss, test_max_loss = evaluate_fairness_gender(
+                    model_ema,
+                    criterion,
+                    ece_criterion,
+                    data_loader_test,
+                    args=args,
+                    device=device,
+                    log_suffix="EMA",
+                    pos_label=0,
+                )
+            elif(args.sens_attribute == 'skin_type'):
+                raise NotImplementedError
+            elif(args.sens_attribute == 'age'):
+                raise NotImplementedError
         else:
-            test_acc, test_loss, test_auc = evaluate_fairness(
-                model,
-                criterion,
-                ece_criterion,
-                data_loader_test,
-                args=args,
-                device=device,
-                pos_label=0,
-            )
+            if(args.sens_attribute == 'gender'):
+                test_acc, test_male_acc, test_female_acc, test_loss, test_max_loss = evaluate_fairness_gender(
+                    model,
+                    criterion,
+                    ece_criterion,
+                    data_loader_test,
+                    args=args,
+                    device=device,
+                    pos_label=0,
+                )
+            elif(args.sens_attribute == 'skin_type'):
+                raise NotImplementedError
+            elif(args.sens_attribute == 'age'):
+                raise NotImplementedError
         return
 
     # INNER LOOP: TRAINING PROCESS HERE
@@ -393,7 +412,7 @@ def main(args):
                     # print("Attention parameters", attn_params)
                     attn_params = get_attn_params(model)
                     # print("All params trainable" if not check_trainability(attn_params) else "Not all params trainable")
-                    print("Loss: ", torch.mean(loss))
+                    print("Loss: ", torch.mean(loss).item())
 
                     # 2. Calculate the gradients (manually)
                     try:
@@ -527,10 +546,10 @@ def main(args):
                     elif(args.sens_attribute == 'age'):
                         raise NotImplementedError
 
-                    print("META LOSS: ", meta_loss)
+                    print("META LOSS: ", meta_loss.item())
                     
                     if args.wandb_logging:
-                        wandb.log({"Meta Loss": meta_loss})
+                        wandb.log({"Meta Loss": meta_loss.item()})
 
                     outer_optimizer.zero_grad()
                     meta_loss.backward(retain_graph=True)
@@ -615,26 +634,33 @@ def main(args):
                     )
                     # auc = utils.auc(output, target)
                     print("ACC1: {}, ACC5: {}, LOSS: {}".format(acc1, acc5, torch.mean(loss)))
-                    val_acc, val_loss, val_max_loss = evaluate_fairness(
-                        model,
-                        criterion,
-                        ece_criterion,
-                        data_loader_val,
-                        args=args,
-                        device=device,
-                    )
-                    print(
-                        "Val ACC1: {}, Val Loss: {}, Val MAX LOSS: {}".format(
-                            val_acc, val_loss, val_max_loss
+                    if(args.sens_attribute == 'gender'):
+                        val_acc, val_male_acc, val_female_acc, val_loss, val_max_loss = evaluate_fairness_gender(
+                            model,
+                            criterion,
+                            ece_criterion,
+                            data_loader_val,
+                            args=args,
+                            device=device,
                         )
-                    )
+                        print(
+                            "Val Acc: {:.2f}, Val Male Acc {:.2f}, Val Female Acc {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
+                                val_acc, val_male_acc, val_female_acc, torch.mean(val_loss), val_max_loss
+                            )
+                        )
+                    else:
+                        raise NotImplementedError
 
                     if args.wandb_logging:
                         wandb.log({"Train Accuracy": acc1})
                         wandb.log({"Standard Update Loss": loss})
                         wandb.log({"Val Accuracy": val_acc})
-                        wandb.log({"Val Loss": val_loss})
-                        wandb.log({"Val AUC": val_auc})
+
+                        if(args.sens_attribute == 'gender'):
+                            wandb.log({"Val Male Accuracy": val_male_acc})
+                            wandb.log({"Val Female Accuracy": val_female_acc})
+                            wandb.log({"Val Loss": torch.mean(val_loss)})
+                        #wandb.log({"Val AUC": val_auc})
 
                     # Re-enabling all the attention blocks
                     for idx, block in enumerate(model.blocks):
@@ -645,8 +671,14 @@ def main(args):
                     # else:
                     #     print("MASK: ", args.mask)
                     
-
-                acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
+                if(args.sens_attribute == 'gender'):
+                    acc1, acc_male, acc_female = utils.accuracy_by_gender(output, target, sens_attr, topk=(1, args.num_classes))
+                    acc1 = acc1[0]
+                    acc_male = acc_male[0]
+                    acc_female = acc_female[0]
+                else:
+                    raise NotImplementedError
+                
                 batch_size = image.shape[0]
                 metric_logger.update(
                     loss=torch.mean(loss).item(), lr=inner_optimizer.param_groups[0]["lr"]
@@ -655,7 +687,10 @@ def main(args):
                     ece_loss=ece_loss.item(), lr=inner_optimizer.param_groups[0]["lr"]
                 )
                 metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
+                metric_logger.meters["acc1_male"].update(acc_male.item(), n=batch_size)
+                metric_logger.meters["acc1_female"].update(acc_female.item(), n=batch_size)
                 metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+
                 metric_logger.meters["img/s"].update(
                     batch_size / (time.time() - start_time)
                 )
@@ -702,15 +737,17 @@ def main(args):
                 lr_scheduler_outer.step()
 
             if model_ema:
-                val_acc, val_loss, val_auc = evaluate_fairness(
-                    model_ema,
-                    criterion,
-                    ece_criterion,
-                    data_loader_val,
-                    args=args,
-                    device=device,
-                    log_suffix="EMA",
-                )
+                if(args.sens_attribute == 'gender'):
+                    val_acc, val_male_acc, val_female_acc, val_loss, val_max_loss = evaluate_fairness_gender(
+                        model,
+                        criterion,
+                        ece_criterion,
+                        data_loader_val,
+                        args=args,
+                        device=device,
+                    )
+                else:
+                    raise NotImplementedError
             if args.output_dir:
                 checkpoint = {
                     "model": model_without_ddp.state_dict(),
@@ -763,33 +800,42 @@ def main(args):
 
         # Plotting the change in mask during training
         plot_mask(args, MASK_DICT)
-
-        val_acc, val_loss, val_max_loss = evaluate_fairness(
-            model,
-            criterion,
-            ece_criterion,
-            data_loader_val,
-            args=args,
-            device=device,
-            pos_label=0,
-        )
-        print("Val accuracy: ", val_acc)
-        print("Val loss: ", val_loss)
-        print("Val max loss: ", val_max_loss)
-
         
-        test_acc, test_loss, test_max_loss = evaluate_fairness(
-            model,
-            criterion,
-            ece_criterion,
-            data_loader_test,
-            args=args,
-            device=device,
-            pos_label=0,
-        )
-        print("Test accuracy: ", test_acc)
-        print("Test loss: ", test_loss)
-        print("Test max loss: ", test_max_loss)
+        if(args.sens_attribute == 'gender'):
+            val_acc, val_male_acc, val_female_acc, val_loss, val_max_loss = evaluate_fairness_gender(
+                model,
+                criterion,
+                ece_criterion,
+                data_loader_val,
+                args=args,
+                device=device,
+            )
+            print("Val accuracy: ", val_acc)
+            print("Val Male acc: ", val_male_acc)
+            print("Val Female acc: ", val_female_acc)
+            print("Val loss: ", torch.mean(val_loss))
+            print("Val max loss: ", val_max_loss)
+        else:
+            raise NotImplementedError
+
+
+        if(args.sens_attribute == 'gender'):
+            test_acc, test_male_acc, test_female_acc, test_loss, test_max_loss = evaluate_fairness_gender(
+                model,
+                criterion,
+                ece_criterion,
+                data_loader_test,
+                args=args,
+                device=device,
+                pos_label=0,
+            )
+            print("Test accuracy: ", test_acc)
+            print("Test Male Accuracy: ", test_male_acc)
+            print("Test Female Accuracy: ", test_female_acc)
+            print("Test loss: ", torch.mean(test_loss))
+            print("Test max loss: ", test_max_loss)
+        else:
+            raise NotImplementedError
 
         
 
@@ -842,15 +888,21 @@ def main(args):
         else:
             method_name = "Dynamic_" + args.tuning_method
 
-        new_row = [
-            method_name,
-            np.mean(track_trainable_params),
-            args.lr_scaler,
-            args.lr,
-            args.outer_lr,
-            test_acc,
-            np.nan,
-        ]
+        if(args.sens_attribute == 'gender'):
+            new_row = [
+                method_name,
+                np.mean(track_trainable_params),
+                args.lr_scaler,
+                args.lr,
+                args.outer_lr,
+                test_acc,
+                test_male_acc,
+                test_female_acc,
+                abs(test_male_acc - test_female_acc)
+            ]
+        else:
+            raise NotImplementedError
+        
         test_results_df.loc[len(test_results_df)] = new_row
         test_results_df.to_csv(
             os.path.join(args.output_dir, args.test_results_df), index=False
@@ -871,7 +923,7 @@ if __name__ == "__main__":
     # args.results_df = 'Fixed_Vectors_' + args.tuning_method + '_' + args.model + '_' + str(args.lr) + '.csv'
     args.results_df = "Fixed_Vectors_" + args.tuning_method + "_" + args.model + ".csv"
     args.test_results_df = (
-        "Test_set_results_" + args.tuning_method + "_" + args.model + ".csv"
+        "Fairness_Test_set_results_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + ".csv"
     )
     current_wd = os.getcwd()
     args.vector_savepath = os.path.join(
