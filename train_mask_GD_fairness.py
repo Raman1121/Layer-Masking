@@ -83,8 +83,24 @@ def main(args):
                         "Test Acc Male",
                         "Test Acc Female",
                         "Test Acc Difference",
+                        "Vector Path",
                     ]
                 )
+        elif(args.sens_attribute == 'skin_type'):
+            test_results_df = pd.DataFrame(
+                columns=[
+                    "Tuning Method",
+                    "Train Percent",
+                    "LR Scaler",
+                    "Inner LR",
+                    "Outer LR",
+                    "Test Acc@1",
+                    "Test Acc (Best)",
+                    "Test Acc (Worst)",
+                    "Test Acc Difference",
+                    "Vector Path",
+                ]
+            ) 
         else:
             raise NotImplementedError
 
@@ -313,7 +329,26 @@ def main(args):
                     pos_label=0,
                 )
             elif(args.sens_attribute == 'skin_type'):
-                raise NotImplementedError
+                (
+                test_acc,
+                test_acc_type0,
+                test_acc_type1,
+                test_acc_type2,
+                test_acc_type3,
+                test_acc_type4,
+                test_acc_type5,
+                test_loss,
+                test_max_loss,
+            ) = evaluate_fairness_skin_type(
+                    model_ema,
+                    criterion,
+                    ece_criterion,
+                    data_loader_test,
+                    args=args,
+                    device=device,
+                    log_suffix="EMA",
+                    pos_label=0,
+            )
             elif(args.sens_attribute == 'age'):
                 raise NotImplementedError
         else:
@@ -328,7 +363,25 @@ def main(args):
                     pos_label=0,
                 )
             elif(args.sens_attribute == 'skin_type'):
-                raise NotImplementedError
+                (
+                    test_acc,
+                    test_acc_type0,
+                    test_acc_type1,
+                    test_acc_type2,
+                    test_acc_type3,
+                    test_acc_type4,
+                    test_acc_type5,
+                    test_loss,
+                    test_max_loss,
+                ) = evaluate_fairness_skin_type(
+                    model,
+                    criterion,
+                    ece_criterion,
+                    data_loader_test,
+                    args=args,
+                    device=device,
+                    pos_label=0,
+                )
             elif(args.sens_attribute == 'age'):
                 raise NotImplementedError
         return
@@ -546,6 +599,7 @@ def main(args):
                     elif(args.sens_attribute == 'age'):
                         raise NotImplementedError
 
+                    
                     print("META LOSS: ", meta_loss.item())
                     
                     if args.wandb_logging:
@@ -648,6 +702,38 @@ def main(args):
                                 val_acc, val_male_acc, val_female_acc, torch.mean(val_loss), val_max_loss
                             )
                         )
+                    elif(args.sens_attribute == 'skin_type'):
+                        (
+                            val_acc,
+                            val_acc_type0,
+                            val_acc_type1,
+                            val_acc_type2,
+                            val_acc_type3,
+                            val_acc_type4,
+                            val_acc_type5,
+                            val_loss,
+                            val_max_loss,
+                        ) = evaluate_fairness_skin_type(
+                            model,
+                            criterion,
+                            ece_criterion,
+                            data_loader_val,
+                            args=args,
+                            device=device,
+                        )
+                        print(
+                                "Val Acc: {:.2f}, Val Type 0 Acc: {:.2f}, Val Type 1 Acc: {:.2f}, Val Type 2 Acc: {:.2f}, Val Type 3 Acc: {:.2f}, Val Type 4 Acc: {:.2f}, Val Type 5 Acc: {:.2f}, Val MAX LOSS: {:.2f}".format(
+                                    val_acc,
+                                    val_acc_type0,
+                                    val_acc_type1,
+                                    val_acc_type2,
+                                    val_acc_type3,
+                                    val_acc_type4,
+                                    val_acc_type5,
+                                    torch.mean(val_loss),
+                                    val_max_loss,
+                                )
+                            )
                     else:
                         raise NotImplementedError
 
@@ -676,6 +762,17 @@ def main(args):
                     acc1 = acc1[0]
                     acc_male = acc_male[0]
                     acc_female = acc_female[0]
+                elif(args.sens_attribute == 'skin_type'):
+                    acc1, res_type0, res_type1, res_type2, res_type3, res_type4, res_type5 = utils.accuracy_by_skin_type(
+                            output, target, sens_attr, topk=(1,), num_skin_types=args.num_skin_types
+                        )
+                    acc1 = acc1[0]
+                    acc_type0 = res_type0[0]
+                    acc_type1 = res_type1[0]
+                    acc_type2 = res_type2[0]
+                    acc_type3 = res_type3[0]
+                    acc_type4 = res_type4[0]
+                    acc_type5 = res_type5[0]
                 else:
                     raise NotImplementedError
                 
@@ -815,6 +912,36 @@ def main(args):
             print("Val Female acc: ", val_female_acc)
             print("Val loss: ", torch.mean(val_loss))
             print("Val max loss: ", val_max_loss)
+
+        elif(args.sens_attribute == 'skin_type'):
+            (
+                val_acc,
+                val_acc_type0,
+                val_acc_type1,
+                val_acc_type2,
+                val_acc_type3,
+                val_acc_type4,
+                val_acc_type5,
+                val_loss,
+                val_max_loss,
+            ) = evaluate_fairness_skin_type(
+                model,
+                criterion,
+                ece_criterion,
+                data_loader_val,
+                args=args,
+                device=device,
+            )
+
+            print("Val accuracy: ", val_acc)
+            print("Val Type 0 acc: ", val_acc_type0)
+            print("Val Type 1 acc: ", val_acc_type1)
+            print("Val Type 2 acc: ", val_acc_type2)
+            print("Val Type 3 acc: ", val_acc_type3)
+            print("Val Type 4 acc: ", val_acc_type4)
+            print("Val Type 5 acc: ", val_acc_type5)
+            print("Val loss: ", torch.mean(val_loss))
+            print("Val max loss: ", val_max_loss)
         else:
             raise NotImplementedError
 
@@ -829,15 +956,42 @@ def main(args):
                 device=device,
                 pos_label=0,
             )
+            print("\n")
             print("Test accuracy: ", test_acc)
             print("Test Male Accuracy: ", test_male_acc)
             print("Test Female Accuracy: ", test_female_acc)
-            print("Test loss: ", torch.mean(test_loss))
-            print("Test max loss: ", test_max_loss)
+        elif(args.sens_attribute == 'skin_type'):
+            (
+                test_acc,
+                test_acc_type0,
+                test_acc_type1,
+                test_acc_type2,
+                test_acc_type3,
+                test_acc_type4,
+                test_acc_type5,
+                test_loss,
+                test_max_loss,
+            ) = evaluate_fairness_skin_type(
+                model,
+                criterion,
+                ece_criterion,
+                data_loader_test,
+                args=args,
+                device=device,
+            )
+            print("\n")
+            print("Test Type 0 Accuracy: ", test_acc_type0)
+            print("Test Type 1 Accuracy: ", test_acc_type1)
+            print("Test Type 2 Accuracy: ", test_acc_type2)
+            print("Test Type 3 Accuracy: ", test_acc_type3)
+            print("Test Type 4 Accuracy: ", test_acc_type4)
+            print("Test Type 5 Accuracy: ", test_acc_type5)
         else:
             raise NotImplementedError
 
-        
+        print("Test accuracy: ", test_acc)
+        print("Test loss: ", round(torch.mean(test_loss).item(), 3))
+        print("Test max loss: ", round(test_max_loss.item(), 3))
 
         # print("Initial Mask: ", initial_mask)
         # print("Final Mask: ", args.mask)
@@ -891,14 +1045,31 @@ def main(args):
         if(args.sens_attribute == 'gender'):
             new_row = [
                 method_name,
-                np.mean(track_trainable_params),
+                round(np.mean(track_trainable_params), 3),
                 args.lr_scaler,
                 args.lr,
                 args.outer_lr,
                 test_acc,
                 test_male_acc,
                 test_female_acc,
-                abs(test_male_acc - test_female_acc)
+                round(abs(test_male_acc - test_female_acc), 3),
+                np.nan
+            ]
+        elif args.sens_attribute == "skin_type":
+            best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
+            worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
+
+            new_row = [
+                method_name,
+                round(np.mean(track_trainable_params), 3),
+                args.lr_scaler,
+                args.lr,
+                args.outer_lr,
+                test_acc,
+                best_acc,
+                worst_acc,
+                round(abs(best_acc - worst_acc), 3),
+                np.nan
             ]
         else:
             raise NotImplementedError
