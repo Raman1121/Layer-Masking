@@ -354,7 +354,7 @@ def get_args_parser(add_help=True):
     # FAIRNESS Arguements
     parser.add_argument('--sens_attribute',
                         type=str,
-                        default='gender',
+                        default=None,
                         help='Sensitive attribute to be used for fairness')
 
     return parser

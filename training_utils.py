@@ -22,7 +22,7 @@ import torch.utils.data
 import torchvision
 import transforms
 import utils
-from data import HAM10000
+from data import HAM10000, fitzpatrick, papila
 from torch.utils.data.sampler import SubsetRandomSampler
 from sampler import RASampler
 from torch import nn
@@ -98,6 +98,101 @@ def train_one_epoch(
         metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
         metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
         metric_logger.meters["auc"].update(auc, n=batch_size)
+        metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
+
+def train_one_epoch_fairness(
+    model,
+    criterion,
+    ece_criterion,
+    optimizer,
+    data_loader,
+    device,
+    epoch,
+    args,
+    model_ema=None,
+    scaler=None,
+    **kwargs,
+):
+    model.train()
+    metric_logger = utils.MetricLogger(delimiter="  ")
+    metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value}"))
+    metric_logger.add_meter("img/s", utils.SmoothedValue(window_size=10, fmt="{value}"))
+
+    if(args.sens_attribute == 'gender'):
+        total_loss_male = 0.0
+        total_loss_female = 0.0
+        num_male = 0
+        num_female = 0
+    elif(args.sens_attribute == 'skin_type'):
+        total_loss_type1 = 0.0
+        total_loss_type2 = 0.0
+        total_loss_type3 = 0.0
+        total_loss_type4 = 0.0
+        total_loss_type5 = 0.0
+        total_loss_type6 = 0.0
+        num_type1 = 0
+        num_type2 = 0
+        num_type3 = 0
+        num_type4 = 0
+        num_type5 = 0
+        num_type6 = 0
+    elif(args.sens_attribute == 'age'):
+        raise NotImplementedError
+
+    header = f"Epoch: [{epoch}]"
+    for i, (image, target, sens_attr) in enumerate(
+        metric_logger.log_every(data_loader, args.print_freq, header)
+    ):
+        start_time = time.time()
+        image, target = image.to(device), target.to(device)
+
+        with torch.cuda.amp.autocast(enabled=scaler is not None):
+            output = model(image)
+            loss = torch.mean(criterion(output, target))
+
+            ece_loss = ece_criterion(output, target)
+
+        optimizer.zero_grad()
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            if args.clip_grad_norm is not None:
+                # we should unscale the gradients of optimizer's assigned params if do gradient clipping
+                scaler.unscale_(optimizer)
+                nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            if args.clip_grad_norm is not None:
+                nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
+            optimizer.step()
+
+        if model_ema and i % args.model_ema_steps == 0:
+            model_ema.update_parameters(model)
+            if epoch < args.lr_warmup_epochs:
+                # Reset ema buffer to keep copying weights during warmup period
+                model_ema.n_averaged.fill_(0)
+
+        # acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
+        # auc = utils.auc(output, target, pos_label=kwargs['pos_label'])
+        acc1, acc_male, acc_female = utils.accuracy_by_gender(output, target, sens_attr, topk=(1, args.num_classes))
+        auc_dict = utils.roc_auc_score_multiclass(output, target)
+        auc = sum(auc_dict.keys()) / len(auc_dict)
+
+        acc1 = acc1[0]
+        acc_male = acc_male[0]
+        acc_female = acc_female[0]
+        batch_size = image.shape[0]
+
+        metric_logger.update(loss=loss.item(), lr=optimizer.param_groups[0]["lr"])
+        metric_logger.update(
+            ece_loss=ece_loss.item(), lr=optimizer.param_groups[0]["lr"]
+        )
+        metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
+        metric_logger.meters["acc1_male"].update(acc_male.item(), n=batch_size)
+        metric_logger.meters["acc1_female"].update(acc_female.item(), n=batch_size)
+        #metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+        #metric_logger.meters["auc"].update(auc, n=batch_size)
         metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
 
 
@@ -525,8 +620,8 @@ def evaluate_fairness_gender(
     acc_avg = metric_logger.acc1.global_avg
     male_acc_avg = metric_logger.acc1_male.global_avg
     female_acc_avg = metric_logger.acc1_female.global_avg
-    
-    return acc_avg, male_acc_avg, female_acc_avg, loss, max_val_loss
+
+    return round(acc_avg, 3), round(male_acc_avg, 3), round(female_acc_avg, 3), loss, max_val_loss
 
 def evaluate_fairness_skin_type(
     model,
@@ -886,6 +981,10 @@ def load_fairness_data(args, df, df_val, df_test):
 
         if(args.dataset == 'HAM10000'):
             dataset = HAM10000.HAM10000Dataset(df, transform)
+        elif(args.dataset == 'fitzpatrick'):
+            dataset = fitzpatrick.FitzpatrickDataset(df, transform)
+        elif(args.dataset == 'papila'):
+            dataset = papila.PapilaDataset(df, transform)
         else:
             raise NotImplementedError
         
@@ -906,8 +1005,17 @@ def load_fairness_data(args, df, df_val, df_test):
                 resize_size=val_resize_size,
                 interpolation=interpolation,
             )
-        dataset_val = HAM10000.HAM10000Dataset(df_val, transform_eval)
-        dataset_test = HAM10000.HAM10000Dataset(df_test, transform_eval)
+        if(args.dataset == 'HAM10000'):
+            dataset_val = HAM10000.HAM10000Dataset(df_val, transform_eval)
+            dataset_test = HAM10000.HAM10000Dataset(df_test, transform_eval)
+        elif(args.dataset == 'fitzpatrick'):
+            dataset_val = fitzpatrick.FitzpatrickDataset(df_val, transform_eval)
+            dataset_test = fitzpatrick.FitzpatrickDataset(df_test, transform_eval)
+        elif(args.dataset == 'papila'):
+            dataset_val = papila.PapilaDataset(df_val, transform_eval)
+            dataset_test = papila.PapilaDataset(df_test, transform_eval)
+        else:
+            raise NotImplementedError
 
     print("Creating data loaders")
 
