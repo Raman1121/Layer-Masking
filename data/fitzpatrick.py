@@ -27,6 +27,7 @@ class FitzpatrickDataset(Dataset):
     
     def __getitem__(self, idx):
         image = read_image(self.df.iloc[idx]['Path'], mode=ImageReadMode.RGB)
+        image = T.ToPILImage()(image)
         label = self.df.iloc[idx]['label_idx']
         sens_attribute = self.df.iloc[idx]['skin_type']
 

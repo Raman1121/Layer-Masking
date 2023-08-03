@@ -817,6 +817,114 @@ def accuracy_by_gender(output, target, sens_attribute, topk=(1,)):
 
         return res, res_male, res_female
 
+def accuracy_by_skin_type(output, target, sens_attribute, topk=(1,), num_skin_types=6):
+    """Computes the accuracy over the k top predictions for the specified values of k
+       for the whole dataset and different skin types separately.
+    """
+    with torch.inference_mode():
+        maxk = max(topk)
+        batch_size = target.size(0)
+        if target.ndim == 2:
+            target = target.max(dim=1)[1]
+
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target[None])
+
+        # Calculate accuracy for the whole dataset
+        res = []
+        for k in topk:
+            correct_k = correct[:k].flatten().sum(dtype=torch.float32)
+            res.append(correct_k * (100.0 / batch_size))
+
+        # Calculate accuracy for the each skin type
+        type0_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 0]
+        type0_correct = correct[:, type0_indices]
+        res_type0 = []
+        for k in topk:
+            correct_k = type0_correct[:k].flatten().sum(dtype=torch.float32)
+            try:
+                res_type0.append(correct_k * (100.0 / len(type0_indices)))
+            except:
+                res_type0.append(np.nan)
+
+        type1_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 1]
+        type1_correct = correct[:, type1_indices]
+        res_type1 = []
+        for k in topk:
+            correct_k = type1_correct[:k].flatten().sum(dtype=torch.float32)
+            try:    
+                res_type1.append(correct_k * (100.0 / len(type1_indices)))
+            except:
+                res_type1.append(np.nan)
+
+        type2_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 2]
+        type2_correct = correct[:, type2_indices]
+        res_type2 = []
+        for k in topk:
+            correct_k = type2_correct[:k].flatten().sum(dtype=torch.float32)
+            try:
+                res_type2.append(correct_k * (100.0 / len(type2_indices)))
+            except:
+                res_type2.append(np.nan)
+
+        type3_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 3]
+        type3_correct = correct[:, type3_indices]
+        res_type3 = []
+        for k in topk:
+            correct_k = type3_correct[:k].flatten().sum(dtype=torch.float32)
+            try:
+                res_type3.append(correct_k * (100.0 / len(type3_indices)))
+            except:
+                res_type3.append(np.nan)
+
+        type4_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 4]
+        type4_correct = correct[:, type4_indices]
+        res_type4 = []
+        for k in topk:
+            correct_k = type4_correct[:k].flatten().sum(dtype=torch.float32)
+            try:
+                res_type4.append(correct_k * (100.0 / len(type4_indices)))
+            except:
+                res_type4.append(np.nan)
+
+        type5_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 5]
+        type5_correct = correct[:, type5_indices]
+        res_type5 = []
+        for k in topk:
+            correct_k = type5_correct[:k].flatten().sum(dtype=torch.float32)
+            try:
+                res_type5.append(correct_k * (100.0 / len(type5_indices)))
+            except:
+                res_type5.append(np.nan)
+                
+        return res, res_type0, res_type1, res_type2, res_type3, res_type4, res_type5
+
+
+        # # Calculate accuracy for the whole dataset
+        # res = []
+        # for k in topk:
+        #     correct_k = correct[:k].flatten().sum(dtype=torch.float32)
+        #     res.append(correct_k * (100.0 / batch_size))
+
+        # # Calculate accuracy for the different skin types
+        # type_correct = {}
+
+        # for skin_type in range(num_skin_types):
+        #     type_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == skin_type]
+        #     print(skin_type, type_indices)
+        #     type_correct[skin_type] = correct[:, type_indices]
+
+        # res_type = {}
+        # for skin_type in range(num_skin_types):
+        #     res_type[skin_type] = []
+        #     for k in topk:
+        #         correct_k = type_correct[skin_type][:k].flatten().sum(dtype=torch.float32)
+        #         res_type[skin_type].append(correct_k * (100.0 / len(type_indices)))
+
+        # return res, res_type
+
+
 
 def auc(output, target, **kwargs):
     """Computes the top-1 AUC (Area Under the Curve)"""

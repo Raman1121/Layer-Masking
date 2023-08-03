@@ -100,6 +100,7 @@ def train_one_epoch(
         metric_logger.meters["auc"].update(auc, n=batch_size)
         metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
 
+
 def train_one_epoch_fairness(
     model,
     criterion,
@@ -118,12 +119,12 @@ def train_one_epoch_fairness(
     metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value}"))
     metric_logger.add_meter("img/s", utils.SmoothedValue(window_size=10, fmt="{value}"))
 
-    if(args.sens_attribute == 'gender'):
+    if args.sens_attribute == "gender":
         total_loss_male = 0.0
         total_loss_female = 0.0
         num_male = 0
         num_female = 0
-    elif(args.sens_attribute == 'skin_type'):
+    elif args.sens_attribute == "skin_type":
         total_loss_type1 = 0.0
         total_loss_type2 = 0.0
         total_loss_type3 = 0.0
@@ -136,7 +137,7 @@ def train_one_epoch_fairness(
         num_type4 = 0
         num_type5 = 0
         num_type6 = 0
-    elif(args.sens_attribute == 'age'):
+    elif args.sens_attribute == "age":
         raise NotImplementedError
 
     header = f"Epoch: [{epoch}]"
@@ -175,13 +176,32 @@ def train_one_epoch_fairness(
 
         # acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
         # auc = utils.auc(output, target, pos_label=kwargs['pos_label'])
-        acc1, acc_male, acc_female = utils.accuracy_by_gender(output, target, sens_attr, topk=(1, args.num_classes))
-        auc_dict = utils.roc_auc_score_multiclass(output, target)
-        auc = sum(auc_dict.keys()) / len(auc_dict)
+        if args.sens_attribute == "gender":
+            acc1, acc_male, acc_female = utils.accuracy_by_gender(
+                output, target, sens_attr, topk=(1, args.num_classes)
+            )
+            acc1 = acc1[0]
+            acc_male = acc_male[0]
+            acc_female = acc_female[0]
+        elif args.sens_attribute == "skin_type":
+            acc1, res_type0, res_type1, res_type2, res_type3, res_type4, res_type5 = utils.accuracy_by_skin_type(
+                output, target, sens_attr, topk=(1,), num_skin_types=args.num_skin_types
+            )
+            
+            acc1 = acc1[0]
+            acc_type0 = res_type0[0]
+            acc_type1 = res_type1[0]
+            acc_type2 = res_type2[0]
+            acc_type3 = res_type3[0]
+            acc_type4 = res_type4[0]
+            acc_type5 = res_type5[0]
+            
+        else:
+            raise NotImplementedError
 
-        acc1 = acc1[0]
-        acc_male = acc_male[0]
-        acc_female = acc_female[0]
+        #auc_dict = utils.roc_auc_score_multiclass(output, target)
+        #auc = sum(auc_dict.keys()) / len(auc_dict)
+
         batch_size = image.shape[0]
 
         metric_logger.update(loss=loss.item(), lr=optimizer.param_groups[0]["lr"])
@@ -189,10 +209,43 @@ def train_one_epoch_fairness(
             ece_loss=ece_loss.item(), lr=optimizer.param_groups[0]["lr"]
         )
         metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
-        metric_logger.meters["acc1_male"].update(acc_male.item(), n=batch_size)
-        metric_logger.meters["acc1_female"].update(acc_female.item(), n=batch_size)
-        #metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
-        #metric_logger.meters["auc"].update(auc, n=batch_size)
+
+        if args.sens_attribute == "gender":
+            metric_logger.meters["acc1_male"].update(acc_male.item(), n=batch_size)
+            metric_logger.meters["acc1_female"].update(acc_female.item(), n=batch_size)
+        elif args.sens_attribute == "skin_type":
+            if acc_type0 is not np.nan:
+                metric_logger.meters["acc_type0"].update(acc_type0.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_type0"].update(0.0, n=batch_size)
+
+            if acc_type1 is not np.nan: 
+                metric_logger.meters["acc_type1"].update(acc_type1.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_type1"].update(0.0, n=batch_size)
+            
+            if acc_type2 is not np.nan:
+                metric_logger.meters["acc_type2"].update(acc_type2.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_type2"].update(0.0, n=batch_size)
+            
+            if acc_type3 is not np.nan:
+                metric_logger.meters["acc_type3"].update(acc_type3.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_type3"].update(0.0, n=batch_size)
+
+            if acc_type4 is not np.nan:
+                metric_logger.meters["acc_type4"].update(acc_type4.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_type4"].update(0.0, n=batch_size)
+            
+            if acc_type5 is not np.nan:
+                metric_logger.meters["acc_type5"].update(acc_type5.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_type5"].update(0.0, n=batch_size)
+
+        # metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+        # metric_logger.meters["auc"].update(auc, n=batch_size)
         metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
 
 
@@ -529,9 +582,8 @@ def evaluate_fairness_gender(
 ):
     print("EVALUATING")
     model.eval()
-    
-    assert args.sens_attribute == 'gender'
 
+    assert args.sens_attribute == "gender"
 
     total_loss_male = 0.0
     total_loss_female = 0.0
@@ -543,44 +595,53 @@ def evaluate_fairness_gender(
 
     num_processed_samples = 0
     with torch.inference_mode():
-        for image, target, sens_attr in metric_logger.log_every(data_loader, print_freq, header):
+        for image, target, sens_attr in metric_logger.log_every(
+            data_loader, print_freq, header
+        ):
             image = image.to(device, non_blocking=True)
             target = target.to(device, non_blocking=True)
-            #sens_attr = sens_attr.to(device, non_blocking=True)
+            # sens_attr = sens_attr.to(device, non_blocking=True)
 
             output = model(image)
             loss = criterion(output, target)
             ece_loss = ece_criterion(output, target)
 
-            indexes_males = [index for index, gender in enumerate(sens_attr) if gender == 'M']
-            indexes_females = [index for index, gender in enumerate(sens_attr) if gender == 'F']
-            
+            indexes_males = [
+                index for index, gender in enumerate(sens_attr) if gender == "M"
+            ]
+            indexes_females = [
+                index for index, gender in enumerate(sens_attr) if gender == "F"
+            ]
+
             loss_male = [loss[index] for index in indexes_males]
             loss_female = [loss[index] for index in indexes_females]
-            
+
             total_loss_male = sum(loss_male)
             total_loss_female = sum(loss_female)
 
-            #num_male += torch.sum(sens_attr == 'M').item()
-            #num_female += torch.sum(sens_attr == 'F').item()
+            # num_male += torch.sum(sens_attr == 'M').item()
+            # num_female += torch.sum(sens_attr == 'F').item()
 
-            num_male += sens_attr.count('M')
-            num_female += sens_attr.count('F')
+            num_male += sens_attr.count("M")
+            num_female += sens_attr.count("F")
 
             avg_loss_male = total_loss_male / num_male if num_male > 0 else 0.0
             avg_loss_female = total_loss_female / num_female if num_female > 0 else 0.0
 
             # Take the maximum of the two losses
             max_val_loss = max(avg_loss_male, avg_loss_female)
+            print("max_val_loss", max_val_loss)
+            print(type(max_val_loss))
             diff_loss = torch.abs(avg_loss_male - avg_loss_female)
-            acc1, acc_male, acc_female = utils.accuracy_by_gender(output, target, sens_attr, topk=(1,))
+            acc1, acc_male, acc_female = utils.accuracy_by_gender(
+                output, target, sens_attr, topk=(1,)
+            )
             acc1 = acc1[0]
             acc_male = acc_male[0]
             acc_female = acc_female[0]
 
             acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
-            auc = 0                
-
+            auc = 0
 
             batch_size = image.shape[0]
             metric_logger.update(loss=torch.mean(loss).item())
@@ -595,21 +656,21 @@ def evaluate_fairness_gender(
             metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
             metric_logger.meters["diff_loss"].update(diff_loss, n=batch_size)
             num_processed_samples += batch_size
-    
+
     # gather the stats from all processes
-    num_processed_samples = utils.reduce_across_processes(num_processed_samples)
-    if (
-        hasattr(data_loader.dataset, "__len__")
-        and len(data_loader.dataset) != num_processed_samples
-        and torch.distributed.get_rank() == 0
-    ):
-        # See FIXME above
-        warnings.warn(
-            f"It looks like the dataset has {len(data_loader.dataset)} samples, but {num_processed_samples} "
-            "samples were used for the validation, which might bias the results. "
-            "Try adjusting the batch size and / or the world size. "
-            "Setting the world size to 1 is always a safe bet."
-        )
+    # num_processed_samples = utils.reduce_across_processes(num_processed_samples)
+    # if (
+    #     hasattr(data_loader.dataset, "__len__")
+    #     and len(data_loader.dataset) != num_processed_samples
+    #     and torch.distributed.get_rank() == 0
+    # ):
+    #     # See FIXME above
+    #     warnings.warn(
+    #         f"It looks like the dataset has {len(data_loader.dataset)} samples, but {num_processed_samples} "
+    #         "samples were used for the validation, which might bias the results. "
+    #         "Try adjusting the batch size and / or the world size. "
+    #         "Setting the world size to 1 is always a safe bet."
+    #     )
 
     metric_logger.synchronize_between_processes()
 
@@ -621,7 +682,14 @@ def evaluate_fairness_gender(
     male_acc_avg = metric_logger.acc1_male.global_avg
     female_acc_avg = metric_logger.acc1_female.global_avg
 
-    return round(acc_avg, 3), round(male_acc_avg, 3), round(female_acc_avg, 3), loss, max_val_loss
+    return (
+        round(acc_avg, 3),
+        round(male_acc_avg, 3),
+        round(female_acc_avg, 3),
+        loss,
+        max_val_loss,
+    )
+
 
 def evaluate_fairness_skin_type(
     model,
@@ -637,8 +705,8 @@ def evaluate_fairness_skin_type(
     print("EVALUATING")
     model.eval()
 
-    assert args.sens_attribute == 'skin_type'
-    
+    assert args.sens_attribute == "skin_type"
+
     total_loss_type1 = 0.0
     total_loss_type2 = 0.0
     total_loss_type3 = 0.0
@@ -657,10 +725,12 @@ def evaluate_fairness_skin_type(
 
     num_processed_samples = 0
     with torch.inference_mode():
-        for image, target, sens_attr in metric_logger.log_every(data_loader, print_freq, header):
+        for image, target, sens_attr in metric_logger.log_every(
+            data_loader, print_freq, header
+        ):
             image = image.to(device, non_blocking=True)
             target = target.to(device, non_blocking=True)
-            #sens_attr = sens_attr.to(device, non_blocking=True)
+            # sens_attr = sens_attr.to(device, non_blocking=True)
 
             output = model(image)
             loss = criterion(output, target)
@@ -682,13 +752,52 @@ def evaluate_fairness_skin_type(
 
             num_type1 += torch.sum(sens_attr == 0).item()
             num_type2 += torch.sum(sens_attr == 1).item()
+            results_df = pd.DataFrame(
+                columns=[
+                    "Tuning Method",
+                    "Train Percent",
+                    "LR",
+                    "Test Acc@1",
+                    "Test Acc Male",
+                    "Test Acc Female",
+                    "Test Acc Difference",
+                ]
+            )
+            test_results_df = pd.DataFrame(
+                columns=[
+                    "Tuning Method",
+                    "Train Percent",
+                    "LR Scaler",
+                    "Inner LR",
+                    "Outer LR",
+                    "Test Acc@1",
+                    "Test Acc Male",
+                    "Test Acc Female",
+                    "Test Acc Difference",
+                    "Vector Path",
+                ]
+            )  
             num_type3 += torch.sum(sens_attr == 2).item()
             num_type4 += torch.sum(sens_attr == 3).item()
             num_type5 += torch.sum(sens_attr == 4).item()
             num_type6 += torch.sum(sens_attr == 5).item()
 
-            total_losses = [total_loss_type1, total_loss_type2, total_loss_type3, total_loss_type4, total_loss_type5, total_loss_type6]
-            num_samples = [num_type1, num_type2, num_type3, num_type4, num_type5, num_type6]
+            total_losses = [
+                total_loss_type1,
+                total_loss_type2,
+                total_loss_type3,
+                total_loss_type4,
+                total_loss_type5,
+                total_loss_type6,
+            ]
+            num_samples = [
+                num_type1,
+                num_type2,
+                num_type3,
+                num_type4,
+                num_type5,
+                num_type6,
+            ]
 
             avg_losses = []
             for total_loss, num in zip(total_losses, num_samples):
@@ -702,18 +811,70 @@ def evaluate_fairness_skin_type(
             avg_loss_type5 = avg_losses[4]
             avg_loss_type6 = avg_losses[5]
 
-            # Take the maximum of all the losses
-            max_val_loss = max(avg_loss_type1, avg_loss_type2, avg_loss_type3, avg_loss_type4, avg_loss_type5, avg_loss_type6)
-            
+            # Take the maximum and minimum of all the losses
+            max_val_loss = torch.tensor(
+                max(
+                    avg_loss_type1,
+                    avg_loss_type2,
+                    avg_loss_type3,
+                    avg_loss_type4,
+                    avg_loss_type5,
+                    avg_loss_type6,
+            ))
+            min_val_loss = torch.tensor(
+                min(
+                    avg_loss_type1,
+                    avg_loss_type2,
+                    avg_loss_type3,
+                    avg_loss_type4,
+                    avg_loss_type5,
+                    avg_loss_type6,
+            ))
+
             # Take the difference between the greatest and the smallest loss
-            min_val_loss = min(avg_loss_type1, avg_loss_type2, avg_loss_type3, avg_loss_type4, avg_loss_type5, avg_loss_type6)
+            #print("max_val_loss", max_val_loss)
+            #print(type(max_val_loss))
             diff_loss = torch.abs(max_val_loss - min_val_loss)
+
             
-            #TODO: Use a different function here
-            #acc1, acc_male, acc_female = utils.accuracy_by_gender(output, target, sens_attr, topk=(1,))
+            acc1, res_type0, res_type1, res_type2, res_type3, res_type4, res_type5 = utils.accuracy_by_skin_type(
+                output, target, sens_attr, topk=(1,), num_skin_types=args.num_skin_types
+            )
+            # acc1, acc_male, acc_female = utils.accuracy_by_gender(output, target, sens_attr, topk=(1,))
+            acc1 = acc1[0]
+
+            try:
+                acc_type0 = res_type0[0]
+            except:
+                acc_type0 = torch.tensor(0.0)
+            
+            try:
+                acc_type1 = res_type1[0]
+            except:
+                acc_type1 = torch.tensor(0.0)
+            
+            try:
+                acc_type2 = res_type2[0]
+            except:
+                acc_type2 = torch.tensor(0.0)
+            
+            try:
+                acc_type3 = res_type3[0]
+            except:
+                acc_type3 = torch.tensor(0.0)
+
+            try:
+                acc_type4 = res_type4[0]
+            except:
+                acc_type4 = torch.tensor(0.0)
+            
+            try:
+                acc_type5 = res_type5[0]
+            except:
+                acc_type5 = torch.tensor(0.0)
 
             acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
-            auc = 0                
+            auc = 0
 
             batch_size = image.shape[0]
             metric_logger.update(loss=torch.mean(loss).item())
@@ -721,36 +882,60 @@ def evaluate_fairness_skin_type(
             metric_logger.update(max_val_loss=max_val_loss)
             metric_logger.update(diff_loss=diff_loss)
             metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
-            #metric_logger.meters["acc1_male"].update(acc_male.item(), n=batch_size)
-            #metric_logger.meters["acc1_female"].update(acc_female.item(), n=batch_size)
+            metric_logger.meters["acc_type0"].update(acc_type0.item(), n=batch_size)
+            metric_logger.meters["acc_type1"].update(acc_type1.item(), n=batch_size)
+            metric_logger.meters["acc_type2"].update(acc_type2.item(), n=batch_size)
+            metric_logger.meters["acc_type3"].update(acc_type3.item(), n=batch_size)
+            metric_logger.meters["acc_type4"].update(acc_type4.item(), n=batch_size)
+            metric_logger.meters["acc_type5"].update(acc_type5.item(), n=batch_size)
             metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
             metric_logger.meters["auc"].update(auc, n=batch_size)
             metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
             metric_logger.meters["diff_loss"].update(diff_loss, n=batch_size)
             num_processed_samples += batch_size
-    
+
     # gather the stats from all processes
-    num_processed_samples = utils.reduce_across_processes(num_processed_samples)
-    if (
-        hasattr(data_loader.dataset, "__len__")
-        and len(data_loader.dataset) != num_processed_samples
-        and torch.distributed.get_rank() == 0
-    ):
-        # See FIXME above
-        warnings.warn(
-            f"It looks like the dataset has {len(data_loader.dataset)} samples, but {num_processed_samples} "
-            "samples were used for the validation, which might bias the results. "
-            "Try adjusting the batch size and / or the world size. "
-            "Setting the world size to 1 is always a safe bet."
-        )
+    # num_processed_samples = utils.reduce_across_processes(num_processed_samples)
+    # if (
+    #     hasattr(data_loader.dataset, "__len__")
+    #     and len(data_loader.dataset) != num_processed_samples
+    #     and torch.distributed.get_rank() == 0
+    # ):
+    #     # See FIXME above
+    #     warnings.warn(
+    #         f"It looks like the dataset has {len(data_loader.dataset)} samples, but {num_processed_samples} "
+    #         "samples were used for the validation, which might bias the results. "
+    #         "Try adjusting the batch size and / or the world size. "
+    #         "Setting the world size to 1 is always a safe bet."
+    #     )
 
     metric_logger.synchronize_between_processes()
 
     print(
         f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f} Max Loss {metric_logger.max_val_loss.global_avg:.3f} Diff Loss {metric_logger.diff_loss.global_avg:.3f}"
     )
-    #return metric_logger.acc1.global_avg, loss, max_val_loss, metric_logger.acc1_male.global_avg, metric_logger.acc1_female.global_avg
-    #TODO: Use a different return statement here
+    # return metric_logger.acc1.global_avg, loss, max_val_loss, metric_logger.acc1_male.global_avg, metric_logger.acc1_female.global_avg
+    # TODO: Use a different return statement here
+
+    acc_avg = metric_logger.acc1.global_avg
+    acc_type0_avg = metric_logger.acc_type0.global_avg
+    acc_type1_avg = metric_logger.acc_type1.global_avg
+    acc_type2_avg = metric_logger.acc_type2.global_avg
+    acc_type3_avg = metric_logger.acc_type3.global_avg
+    acc_type4_avg = metric_logger.acc_type4.global_avg
+    acc_type5_avg = metric_logger.acc_type5.global_avg
+
+    return (
+        round(acc_avg, 3),
+        round(acc_type0_avg, 3),
+        round(acc_type1_avg, 3),
+        round(acc_type2_avg, 3),
+        round(acc_type3_avg, 3),
+        round(acc_type4_avg, 3),
+        round(acc_type5_avg, 3),
+        loss,
+        max_val_loss,
+    )
 
 
 def _get_cache_path(filepath):
@@ -941,6 +1126,7 @@ def load_data(traindir, valdir, testdir, args):
         test_sampler,
     )
 
+
 def load_fairness_data(args, df, df_val, df_test):
     print("Loading fairness data")
     val_resize_size, val_crop_size, train_crop_size = (
@@ -979,15 +1165,16 @@ def load_fairness_data(args, df, df_val, df_test):
             augmix_severity=augmix_severity,
         )
 
-        if(args.dataset == 'HAM10000'):
+        if args.dataset == "HAM10000":
             dataset = HAM10000.HAM10000Dataset(df, transform)
-        elif(args.dataset == 'fitzpatrick'):
+        elif args.dataset == "fitzpatrick":
+            args.num_skin_types = 6
             dataset = fitzpatrick.FitzpatrickDataset(df, transform)
-        elif(args.dataset == 'papila'):
+        elif args.dataset == "papila":
             dataset = papila.PapilaDataset(df, transform)
         else:
             raise NotImplementedError
-        
+
     print("Took", time.time() - st)
     print("Loading validation and test data")
 
@@ -1005,13 +1192,13 @@ def load_fairness_data(args, df, df_val, df_test):
                 resize_size=val_resize_size,
                 interpolation=interpolation,
             )
-        if(args.dataset == 'HAM10000'):
+        if args.dataset == "HAM10000":
             dataset_val = HAM10000.HAM10000Dataset(df_val, transform_eval)
             dataset_test = HAM10000.HAM10000Dataset(df_test, transform_eval)
-        elif(args.dataset == 'fitzpatrick'):
+        elif args.dataset == "fitzpatrick":
             dataset_val = fitzpatrick.FitzpatrickDataset(df_val, transform_eval)
             dataset_test = fitzpatrick.FitzpatrickDataset(df_test, transform_eval)
-        elif(args.dataset == 'papila'):
+        elif args.dataset == "papila":
             dataset_val = papila.PapilaDataset(df_val, transform_eval)
             dataset_test = papila.PapilaDataset(df_test, transform_eval)
         else:
@@ -1194,20 +1381,20 @@ def get_data(args):
 
     return dataset, dataset_val, dataset_test, train_sampler, val_sampler, test_sampler
 
-def get_fairness_data(args, yaml_data):
 
-    train_csv_path = yaml_data['data'][args.dataset]["train_csv"]
-    val_csv_path = yaml_data['data'][args.dataset]["val_csv"]
-    test_csv_path = yaml_data['data'][args.dataset]["test_csv"]
-    img_path = yaml_data['data'][args.dataset]["root_path"]
+def get_fairness_data(args, yaml_data):
+    train_csv_path = yaml_data["data"][args.dataset]["train_csv"]
+    val_csv_path = yaml_data["data"][args.dataset]["val_csv"]
+    test_csv_path = yaml_data["data"][args.dataset]["test_csv"]
+    img_path = yaml_data["data"][args.dataset]["img_path"]
 
     train_df = pd.read_csv(train_csv_path)
     val_df = pd.read_csv(val_csv_path)
     test_df = pd.read_csv(test_csv_path)
 
-    train_df['Path'] = train_df['Path'].apply(lambda x: os.path.join(img_path, x))
-    val_df['Path'] = val_df['Path'].apply(lambda x: os.path.join(img_path, x))
-    test_df['Path'] = test_df['Path'].apply(lambda x: os.path.join(img_path, x))
+    train_df["Path"] = train_df["Path"].apply(lambda x: os.path.join(img_path, x))
+    val_df["Path"] = val_df["Path"].apply(lambda x: os.path.join(img_path, x))
+    test_df["Path"] = test_df["Path"].apply(lambda x: os.path.join(img_path, x))
 
     (
         dataset,
@@ -1217,7 +1404,5 @@ def get_fairness_data(args, yaml_data):
         val_sampler,
         test_sampler,
     ) = load_fairness_data(args, train_df, val_df, test_df)
-    
 
     return dataset, dataset_val, dataset_test, train_sampler, val_sampler, test_sampler
-
