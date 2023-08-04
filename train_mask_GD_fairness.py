@@ -162,6 +162,7 @@ def main(args):
         sampler=val_sampler,
         num_workers=args.workers,
         pin_memory=True,
+        drop_last=True,
     )
 
     data_loader_test = torch.utils.data.DataLoader(
@@ -561,30 +562,59 @@ def main(args):
                         # Take the maximum of the two losses
                         meta_loss = max(avg_loss_male, avg_loss_female)
 
-
-
                     elif(args.sens_attribute == 'skin_type'):
                         # Separate losses for each skin type
-                        loss_type1 = torch.mean(loss[sens_attr_val == 0])
-                        loss_type2 = torch.mean(loss[sens_attr_val == 1])
-                        loss_type3 = torch.mean(loss[sens_attr_val == 2])
-                        loss_type4 = torch.mean(loss[sens_attr_val == 3])
-                        loss_type5 = torch.mean(loss[sens_attr_val == 4])
-                        loss_type6 = torch.mean(loss[sens_attr_val == 5])
-                
-                        total_loss_type1 += loss_type1.item()
-                        total_loss_type2 += loss_type2.item()
-                        total_loss_type3 += loss_type3.item()
-                        total_loss_type4 += loss_type4.item()
-                        total_loss_type5 += loss_type5.item()
-                        total_loss_type6 += loss_type6.item()
 
-                        num_type1 += torch.sum(sens_attr_val == 0).item()
-                        num_type2 += torch.sum(sens_attr_val == 1).item()
-                        num_type3 += torch.sum(sens_attr_val == 2).item()
-                        num_type4 += torch.sum(sens_attr_val == 3).item()
-                        num_type5 += torch.sum(sens_attr_val == 4).item()
-                        num_type6 += torch.sum(sens_attr_val == 5).item()
+                        sens_attr_val = sens_attr_val.tolist()
+
+                        idx_type1 = [index for index, skin_type in enumerate(sens_attr_val) if skin_type == 0]
+                        idx_type2 = [index for index, skin_type in enumerate(sens_attr_val) if skin_type == 1]
+                        idx_type3 = [index for index, skin_type in enumerate(sens_attr_val) if skin_type == 2]
+                        idx_type4 = [index for index, skin_type in enumerate(sens_attr_val) if skin_type == 3]
+                        idx_type5 = [index for index, skin_type in enumerate(sens_attr_val) if skin_type == 4]
+                        idx_type6 = [index for index, skin_type in enumerate(sens_attr_val) if skin_type == 5]
+
+                        loss_type1 = [val_loss[index] for index in idx_type1]
+                        loss_type2 = [val_loss[index] for index in idx_type2]
+                        loss_type3 = [val_loss[index] for index in idx_type3]
+                        loss_type4 = [val_loss[index] for index in idx_type4]
+                        loss_type5 = [val_loss[index] for index in idx_type5]
+                        loss_type6 = [val_loss[index] for index in idx_type6]
+
+                        # loss_type1 = torch.mean(loss[sens_attr_val == 0])
+                        # loss_type2 = torch.mean(loss[sens_attr_val == 1])
+                        # loss_type3 = torch.mean(loss[sens_attr_val == 2])
+                        # loss_type4 = torch.mean(loss[sens_attr_val == 3])
+                        # loss_type5 = torch.mean(loss[sens_attr_val == 4])
+                        # loss_type6 = torch.mean(loss[sens_attr_val == 5])
+                
+                        # total_loss_type1 += loss_type1.item()
+                        # total_loss_type2 += loss_type2.item()
+                        # total_loss_type3 += loss_type3.item()
+                        # total_loss_type4 += loss_type4.item()
+                        # total_loss_type5 += loss_type5.item()
+                        # total_loss_type6 += loss_type6.item()
+
+                        total_loss_type1 = sum(loss_type1)
+                        total_loss_type2 = sum(loss_type2)
+                        total_loss_type3 = sum(loss_type3)
+                        total_loss_type4 = sum(loss_type4)
+                        total_loss_type5 = sum(loss_type5)
+                        total_loss_type6 = sum(loss_type6)
+
+                        #num_type1 += torch.sum(sens_attr_val == 0).item()
+                        num_type1 += sens_attr_val.count(0)
+                        num_type2 += sens_attr_val.count(1)
+                        num_type3 += sens_attr_val.count(2)
+                        num_type4 += sens_attr_val.count(3)
+                        num_type5 += sens_attr_val.count(4)
+                        num_type6 += sens_attr_val.count(5)
+
+                        # num_type2 += torch.sum(sens_attr_val == 1).item()
+                        # num_type3 += torch.sum(sens_attr_val == 2).item()
+                        # num_type4 += torch.sum(sens_attr_val == 3).item()
+                        # num_type5 += torch.sum(sens_attr_val == 4).item()
+                        # num_type6 += torch.sum(sens_attr_val == 5).item()
 
                         avg_loss_type1 = total_loss_type1 / num_type1 if num_type1 > 0 else 0.0
                         avg_loss_type2 = total_loss_type2 / num_type2 if num_type2 > 0 else 0.0
@@ -762,6 +792,10 @@ def main(args):
                     acc1 = acc1[0]
                     acc_male = acc_male[0]
                     acc_female = acc_female[0]
+
+                    batch_size = image.shape[0]
+                    metric_logger.meters["acc1_male"].update(acc_male.item(), n=batch_size)
+                    metric_logger.meters["acc1_female"].update(acc_female.item(), n=batch_size)
                 elif(args.sens_attribute == 'skin_type'):
                     acc1, res_type0, res_type1, res_type2, res_type3, res_type4, res_type5 = utils.accuracy_by_skin_type(
                             output, target, sens_attr, topk=(1,), num_skin_types=args.num_skin_types
@@ -773,10 +807,18 @@ def main(args):
                     acc_type3 = res_type3[0]
                     acc_type4 = res_type4[0]
                     acc_type5 = res_type5[0]
+
+                    batch_size = image.shape[0]
+                    metric_logger.meters["acc_type0"].update(acc_type0.item(), n=batch_size)
+                    metric_logger.meters["acc_type1"].update(acc_type1.item(), n=batch_size)
+                    metric_logger.meters["acc_type2"].update(acc_type2.item(), n=batch_size)
+                    metric_logger.meters["acc_type3"].update(acc_type3.item(), n=batch_size)
+                    metric_logger.meters["acc_type4"].update(acc_type4.item(), n=batch_size)
+                    metric_logger.meters["acc_type5"].update(acc_type5.item(), n=batch_size)
                 else:
                     raise NotImplementedError
                 
-                batch_size = image.shape[0]
+                
                 metric_logger.update(
                     loss=torch.mean(loss).item(), lr=inner_optimizer.param_groups[0]["lr"]
                 )
@@ -784,8 +826,6 @@ def main(args):
                     ece_loss=ece_loss.item(), lr=inner_optimizer.param_groups[0]["lr"]
                 )
                 metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
-                metric_logger.meters["acc1_male"].update(acc_male.item(), n=batch_size)
-                metric_logger.meters["acc1_female"].update(acc_female.item(), n=batch_size)
                 metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
 
                 metric_logger.meters["img/s"].update(

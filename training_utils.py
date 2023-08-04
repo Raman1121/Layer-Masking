@@ -630,8 +630,6 @@ def evaluate_fairness_gender(
 
             # Take the maximum of the two losses
             max_val_loss = max(avg_loss_male, avg_loss_female)
-            print("max_val_loss", max_val_loss)
-            print(type(max_val_loss))
             diff_loss = torch.abs(avg_loss_male - avg_loss_female)
             acc1, acc_male, acc_female = utils.accuracy_by_gender(
                 output, target, sens_attr, topk=(1,)
@@ -752,31 +750,6 @@ def evaluate_fairness_skin_type(
 
             num_type1 += torch.sum(sens_attr == 0).item()
             num_type2 += torch.sum(sens_attr == 1).item()
-            results_df = pd.DataFrame(
-                columns=[
-                    "Tuning Method",
-                    "Train Percent",
-                    "LR",
-                    "Test Acc@1",
-                    "Test Acc Male",
-                    "Test Acc Female",
-                    "Test Acc Difference",
-                ]
-            )
-            test_results_df = pd.DataFrame(
-                columns=[
-                    "Tuning Method",
-                    "Train Percent",
-                    "LR Scaler",
-                    "Inner LR",
-                    "Outer LR",
-                    "Test Acc@1",
-                    "Test Acc Male",
-                    "Test Acc Female",
-                    "Test Acc Difference",
-                    "Vector Path",
-                ]
-            )  
             num_type3 += torch.sum(sens_attr == 2).item()
             num_type4 += torch.sum(sens_attr == 3).item()
             num_type5 += torch.sum(sens_attr == 4).item()
@@ -843,6 +816,13 @@ def evaluate_fairness_skin_type(
             # acc1, acc_male, acc_female = utils.accuracy_by_gender(output, target, sens_attr, topk=(1,))
             acc1 = acc1[0]
 
+            print("acc_type0", res_type0)
+            print("acc_type1", res_type1)
+            print("acc_type2", res_type2)
+            print("acc_type3", res_type3)
+            print("acc_type4", res_type4)
+            print("acc_type5", res_type5)
+
             try:
                 acc_type0 = res_type0[0]
             except:
@@ -872,6 +852,13 @@ def evaluate_fairness_skin_type(
                 acc_type5 = res_type5[0]
             except:
                 acc_type5 = torch.tensor(0.0)
+
+            # print("acc_type0", acc_type0)
+            # print("acc_type1", acc_type1)
+            # print("acc_type2", acc_type2)
+            # print("acc_type3", acc_type3)
+            # print("acc_type4", acc_type4)
+            # print("acc_type5", acc_type5)
 
             acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
             auc = 0

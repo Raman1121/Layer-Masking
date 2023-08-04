@@ -846,7 +846,7 @@ def accuracy_by_skin_type(output, target, sens_attribute, topk=(1,), num_skin_ty
             try:
                 res_type0.append(correct_k * (100.0 / len(type0_indices)))
             except:
-                res_type0.append(np.nan)
+                res_type0.append(torch.tensor(0.0))
 
         type1_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 1]
         type1_correct = correct[:, type1_indices]
@@ -856,7 +856,7 @@ def accuracy_by_skin_type(output, target, sens_attribute, topk=(1,), num_skin_ty
             try:    
                 res_type1.append(correct_k * (100.0 / len(type1_indices)))
             except:
-                res_type1.append(np.nan)
+                res_type1.append(torch.tensor(0.0))
 
         type2_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 2]
         type2_correct = correct[:, type2_indices]
@@ -866,7 +866,7 @@ def accuracy_by_skin_type(output, target, sens_attribute, topk=(1,), num_skin_ty
             try:
                 res_type2.append(correct_k * (100.0 / len(type2_indices)))
             except:
-                res_type2.append(np.nan)
+                res_type2.append(torch.tensor(0.0))
 
         type3_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 3]
         type3_correct = correct[:, type3_indices]
@@ -876,7 +876,7 @@ def accuracy_by_skin_type(output, target, sens_attribute, topk=(1,), num_skin_ty
             try:
                 res_type3.append(correct_k * (100.0 / len(type3_indices)))
             except:
-                res_type3.append(np.nan)
+                res_type3.append(torch.tensor(0.0))
 
         type4_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 4]
         type4_correct = correct[:, type4_indices]
@@ -886,17 +886,18 @@ def accuracy_by_skin_type(output, target, sens_attribute, topk=(1,), num_skin_ty
             try:
                 res_type4.append(correct_k * (100.0 / len(type4_indices)))
             except:
-                res_type4.append(np.nan)
+                res_type4.append(torch.tensor(0.0))
 
         type5_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 5]
         type5_correct = correct[:, type5_indices]
         res_type5 = []
         for k in topk:
             correct_k = type5_correct[:k].flatten().sum(dtype=torch.float32)
+            
             try:
                 res_type5.append(correct_k * (100.0 / len(type5_indices)))
             except:
-                res_type5.append(np.nan)
+                res_type5.append(torch.tensor(0.0))
                 
         return res, res_type0, res_type1, res_type2, res_type3, res_type4, res_type5
 

@@ -1,0 +1,25 @@
+data:
+  HAM10000:
+    root_path: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/HAM10000_dataset'
+    img_path: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/HAM10000_dataset/combined'
+    train_csv: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/HAM10000_dataset/MEDFAIR_splits/new_train.csv'
+    val_csv: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/HAM10000_dataset/MEDFAIR_splits/new_val.csv'
+    test_csv: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/HAM10000_dataset/MEDFAIR_splits/new_test.csv'
+
+  fitzpatrick:
+    root_path: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/Fitzpatrick'
+    img_path: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/Fitzpatrick/data/finalfitz17k'
+    train_csv: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/Fitzpatrick/MEDFAIR_splits/new_train.csv'
+    val_csv: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/Fitzpatrick/MEDFAIR_splits/new_val.csv'
+    test_csv: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/Fitzpatrick/MEDFAIR_splits/new_test.csv'
+
+  papila:
+    root_path: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/PAPILA'
+    img_path: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/PAPILA/FundusImages'
+    train_csv: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/PAPILA/MEDFAIR_SPLITS/new_train.csv'
+    val_csv: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/PAPILA/MEDFAIR_SPLITS/new_val.csv'
+    test_csv: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/PAPILA/MEDFAIR_SPLITS/new_test.csv'
+    
+  
+
+  
