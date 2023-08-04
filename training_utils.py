@@ -119,26 +119,6 @@ def train_one_epoch_fairness(
     metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value}"))
     metric_logger.add_meter("img/s", utils.SmoothedValue(window_size=10, fmt="{value}"))
 
-    if args.sens_attribute == "gender":
-        total_loss_male = 0.0
-        total_loss_female = 0.0
-        num_male = 0
-        num_female = 0
-    elif args.sens_attribute == "skin_type":
-        total_loss_type1 = 0.0
-        total_loss_type2 = 0.0
-        total_loss_type3 = 0.0
-        total_loss_type4 = 0.0
-        total_loss_type5 = 0.0
-        total_loss_type6 = 0.0
-        num_type1 = 0
-        num_type2 = 0
-        num_type3 = 0
-        num_type4 = 0
-        num_type5 = 0
-        num_type6 = 0
-    elif args.sens_attribute == "age":
-        raise NotImplementedError
 
     header = f"Epoch: [{epoch}]"
     for i, (image, target, sens_attr) in enumerate(
@@ -149,6 +129,13 @@ def train_one_epoch_fairness(
 
         with torch.cuda.amp.autocast(enabled=scaler is not None):
             output = model(image)
+
+            # if(args.num_classes == 2):
+            #     #We are using Binary Cross Entropy Loss
+            #     output = output.view(-1)
+
+            print(output.dtype, target.dtype)
+            #print(output, target)
             loss = torch.mean(criterion(output, target))
 
             ece_loss = ece_criterion(output, target)
@@ -183,6 +170,7 @@ def train_one_epoch_fairness(
             acc1 = acc1[0]
             acc_male = acc_male[0]
             acc_female = acc_female[0]
+
         elif args.sens_attribute == "skin_type":
             acc1, res_type0, res_type1, res_type2, res_type3, res_type4, res_type5 = utils.accuracy_by_skin_type(
                 output, target, sens_attr, topk=(1,), num_skin_types=args.num_skin_types
@@ -195,7 +183,17 @@ def train_one_epoch_fairness(
             acc_type3 = res_type3[0]
             acc_type4 = res_type4[0]
             acc_type5 = res_type5[0]
-            
+
+        elif args.sens_attribute == "age":
+            acc1, res_type0, res_type1, res_type2, res_type3, res_type4 = utils.accuracy_by_age(
+                output, target, sens_attr, topk=(1,)
+            )
+            acc1 = acc1[0]
+            acc_type0 = res_type0[0]
+            acc_type1 = res_type1[0]
+            acc_type2 = res_type2[0]
+            acc_type3 = res_type3[0]
+            acc_type4 = res_type4[0]
         else:
             raise NotImplementedError
 
@@ -243,6 +241,32 @@ def train_one_epoch_fairness(
                 metric_logger.meters["acc_type5"].update(acc_type5.item(), n=batch_size)
             else:
                 metric_logger.meters["acc_type5"].update(0.0, n=batch_size)
+
+        elif args.sens_attribute == "age":
+            if acc_type0 is not np.nan:
+                metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_Age0"].update(0.0, n=batch_size)
+
+            if acc_type1 is not np.nan: 
+                metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_Age1"].update(0.0, n=batch_size)
+            
+            if acc_type2 is not np.nan:
+                metric_logger.meters["acc_Age2"].update(acc_type2.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_Age2"].update(0.0, n=batch_size)
+            
+            if acc_type3 is not np.nan:
+                metric_logger.meters["acc_Age3"].update(acc_type3.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_Age3"].update(0.0, n=batch_size)
+
+            if acc_type4 is not np.nan:
+                metric_logger.meters["acc_Age4"].update(acc_type4.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_Age4"].update(0.0, n=batch_size)
 
         # metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
         # metric_logger.meters["auc"].update(auc, n=batch_size)
@@ -816,13 +840,6 @@ def evaluate_fairness_skin_type(
             # acc1, acc_male, acc_female = utils.accuracy_by_gender(output, target, sens_attr, topk=(1,))
             acc1 = acc1[0]
 
-            print("acc_type0", res_type0)
-            print("acc_type1", res_type1)
-            print("acc_type2", res_type2)
-            print("acc_type3", res_type3)
-            print("acc_type4", res_type4)
-            print("acc_type5", res_type5)
-
             try:
                 acc_type0 = res_type0[0]
             except:
@@ -852,13 +869,6 @@ def evaluate_fairness_skin_type(
                 acc_type5 = res_type5[0]
             except:
                 acc_type5 = torch.tensor(0.0)
-
-            # print("acc_type0", acc_type0)
-            # print("acc_type1", acc_type1)
-            # print("acc_type2", acc_type2)
-            # print("acc_type3", acc_type3)
-            # print("acc_type4", acc_type4)
-            # print("acc_type5", acc_type5)
 
             acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
             auc = 0
@@ -920,6 +930,210 @@ def evaluate_fairness_skin_type(
         round(acc_type3_avg, 3),
         round(acc_type4_avg, 3),
         round(acc_type5_avg, 3),
+        loss,
+        max_val_loss,
+    )
+
+def evaluate_fairness_age(
+    model,
+    criterion,
+    ece_criterion,
+    data_loader,
+    device,
+    args,
+    print_freq=100,
+    log_suffix="",
+    **kwargs,
+):
+    print("EVALUATING")
+    model.eval()
+
+    assert args.sens_attribute == "age"
+
+    total_loss_type1 = 0.0
+    total_loss_type2 = 0.0
+    total_loss_type3 = 0.0
+    total_loss_type4 = 0.0
+    total_loss_type5 = 0.0
+    num_type1 = 0
+    num_type2 = 0
+    num_type3 = 0
+    num_type4 = 0
+    num_type5 = 0
+
+    metric_logger = utils.MetricLogger(delimiter="  ")
+    header = f"Test: {log_suffix}"
+
+    num_processed_samples = 0
+    with torch.inference_mode():
+        for image, target, sens_attr in metric_logger.log_every(
+            data_loader, print_freq, header
+        ):
+            image = image.to(device, non_blocking=True)
+            target = target.to(device, non_blocking=True)
+            # sens_attr = sens_attr.to(device, non_blocking=True)
+
+            output = model(image)
+            loss = criterion(output, target)
+            ece_loss = ece_criterion(output, target)
+
+            loss_type1 = torch.mean(loss[sens_attr == 0])
+            loss_type2 = torch.mean(loss[sens_attr == 1])
+            loss_type3 = torch.mean(loss[sens_attr == 2])
+            loss_type4 = torch.mean(loss[sens_attr == 3])
+            loss_type5 = torch.mean(loss[sens_attr == 4])
+
+            total_loss_type1 += loss_type1.item()
+            total_loss_type2 += loss_type2.item()
+            total_loss_type3 += loss_type3.item()
+            total_loss_type4 += loss_type4.item()
+            total_loss_type5 += loss_type5.item()
+
+            num_type1 += torch.sum(sens_attr == 0).item()
+            num_type2 += torch.sum(sens_attr == 1).item()
+            num_type3 += torch.sum(sens_attr == 2).item()
+            num_type4 += torch.sum(sens_attr == 3).item()
+            num_type5 += torch.sum(sens_attr == 4).item()
+
+            total_losses = [
+                total_loss_type1,
+                total_loss_type2,
+                total_loss_type3,
+                total_loss_type4,
+                total_loss_type5,
+            ]
+            num_samples = [
+                num_type1,
+                num_type2,
+                num_type3,
+                num_type4,
+                num_type5,
+            ]
+
+            avg_losses = []
+            for total_loss, num in zip(total_losses, num_samples):
+                avg_loss = total_loss / num if num > 0 else 0.0
+                avg_losses.append(avg_loss)
+
+            avg_loss_type1 = avg_losses[0]
+            avg_loss_type2 = avg_losses[1]
+            avg_loss_type3 = avg_losses[2]
+            avg_loss_type4 = avg_losses[3]
+            avg_loss_type5 = avg_losses[4]
+
+            # Take the maximum and minimum of all the losses
+            max_val_loss = torch.tensor(
+                max(
+                    avg_loss_type1,
+                    avg_loss_type2,
+                    avg_loss_type3,
+                    avg_loss_type4,
+                    avg_loss_type5,
+            ))
+            min_val_loss = torch.tensor(
+                min(
+                    avg_loss_type1,
+                    avg_loss_type2,
+                    avg_loss_type3,
+                    avg_loss_type4,
+                    avg_loss_type5,
+            ))
+
+            # Take the difference between the greatest and the smallest loss
+            #print("max_val_loss", max_val_loss)
+            #print(type(max_val_loss))
+            diff_loss = torch.abs(max_val_loss - min_val_loss)
+
+            
+            acc1, res_type0, res_type1, res_type2, res_type3, res_type4 = utils.accuracy_by_age(
+                output, target, sens_attr, topk=(1,)
+            )
+            
+            acc1 = acc1[0]
+
+            try:
+                acc_type0 = res_type0[0]
+            except:
+                acc_type0 = torch.tensor(0.0)
+            
+            try:
+                acc_type1 = res_type1[0]
+            except:
+                acc_type1 = torch.tensor(0.0)
+            
+            try:
+                acc_type2 = res_type2[0]
+            except:
+                acc_type2 = torch.tensor(0.0)
+            
+            try:
+                acc_type3 = res_type3[0]
+            except:
+                acc_type3 = torch.tensor(0.0)
+
+            try:
+                acc_type4 = res_type4[0]
+            except:
+                acc_type4 = torch.tensor(0.0)
+            
+
+            acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
+            auc = 0
+
+            batch_size = image.shape[0]
+            metric_logger.update(loss=torch.mean(loss).item())
+            metric_logger.update(ece_loss=ece_loss.item())
+            metric_logger.update(max_val_loss=max_val_loss)
+            metric_logger.update(diff_loss=diff_loss)
+            metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
+            metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
+            metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
+            metric_logger.meters["acc_Age2"].update(acc_type2.item(), n=batch_size)
+            metric_logger.meters["acc_Age3"].update(acc_type3.item(), n=batch_size)
+            metric_logger.meters["acc_Age4"].update(acc_type4.item(), n=batch_size)
+            metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+            metric_logger.meters["auc"].update(auc, n=batch_size)
+            metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
+            metric_logger.meters["diff_loss"].update(diff_loss, n=batch_size)
+            num_processed_samples += batch_size
+
+    # gather the stats from all processes
+    # num_processed_samples = utils.reduce_across_processes(num_processed_samples)
+    # if (
+    #     hasattr(data_loader.dataset, "__len__")
+    #     and len(data_loader.dataset) != num_processed_samples
+    #     and torch.distributed.get_rank() == 0
+    # ):
+    #     # See FIXME above
+    #     warnings.warn(
+    #         f"It looks like the dataset has {len(data_loader.dataset)} samples, but {num_processed_samples} "
+    #         "samples were used for the validation, which might bias the results. "
+    #         "Try adjusting the batch size and / or the world size. "
+    #         "Setting the world size to 1 is always a safe bet."
+    #     )
+
+    metric_logger.synchronize_between_processes()
+
+    print(
+        f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f} Max Loss {metric_logger.max_val_loss.global_avg:.3f} Diff Loss {metric_logger.diff_loss.global_avg:.3f}"
+    )
+    # return metric_logger.acc1.global_avg, loss, max_val_loss, metric_logger.acc1_male.global_avg, metric_logger.acc1_female.global_avg
+    # TODO: Use a different return statement here
+
+    acc_avg = metric_logger.acc1.global_avg
+    acc_age0_avg = metric_logger.acc_Age0.global_avg
+    acc_age1_avg = metric_logger.acc_Age1.global_avg
+    acc_age2_avg = metric_logger.acc_Age2.global_avg
+    acc_age3_avg = metric_logger.acc_Age3.global_avg
+    acc_age4_avg = metric_logger.acc_Age4.global_avg
+
+    return (
+        round(acc_avg, 3),
+        round(acc_age0_avg, 3),
+        round(acc_age1_avg, 3),
+        round(acc_age2_avg, 3),
+        round(acc_age3_avg, 3),
+        round(acc_age4_avg, 3),
         loss,
         max_val_loss,
     )
@@ -1153,12 +1367,12 @@ def load_fairness_data(args, df, df_val, df_test):
         )
 
         if args.dataset == "HAM10000":
-            dataset = HAM10000.HAM10000Dataset(df, transform)
+            dataset = HAM10000.HAM10000Dataset(df, args.sens_attribute, transform)
         elif args.dataset == "fitzpatrick":
             args.num_skin_types = 6
             dataset = fitzpatrick.FitzpatrickDataset(df, transform)
         elif args.dataset == "papila":
-            dataset = papila.PapilaDataset(df, transform)
+            dataset = papila.PapilaDataset(df, args.sens_attribute, transform)
         else:
             raise NotImplementedError
 
@@ -1180,14 +1394,14 @@ def load_fairness_data(args, df, df_val, df_test):
                 interpolation=interpolation,
             )
         if args.dataset == "HAM10000":
-            dataset_val = HAM10000.HAM10000Dataset(df_val, transform_eval)
-            dataset_test = HAM10000.HAM10000Dataset(df_test, transform_eval)
+            dataset_val = HAM10000.HAM10000Dataset(df_val, args.sens_attribute, transform_eval)
+            dataset_test = HAM10000.HAM10000Dataset(df_test, args.sens_attribute, transform_eval)
         elif args.dataset == "fitzpatrick":
             dataset_val = fitzpatrick.FitzpatrickDataset(df_val, transform_eval)
             dataset_test = fitzpatrick.FitzpatrickDataset(df_test, transform_eval)
         elif args.dataset == "papila":
-            dataset_val = papila.PapilaDataset(df_val, transform_eval)
-            dataset_test = papila.PapilaDataset(df_test, transform_eval)
+            dataset_val = papila.PapilaDataset(df_val, args.sens_attribute, transform_eval)
+            dataset_test = papila.PapilaDataset(df_test, args.sens_attribute, transform_eval)
         else:
             raise NotImplementedError
 

@@ -162,7 +162,7 @@ def main(args):
         sampler=val_sampler,
         num_workers=args.workers,
         pin_memory=True,
-        drop_last=True,
+        #drop_last=True,
     )
 
     data_loader_test = torch.utils.data.DataLoader(

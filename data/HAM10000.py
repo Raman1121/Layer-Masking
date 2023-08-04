@@ -10,9 +10,13 @@ import yaml
 from PIL import Image
 
 class HAM10000Dataset(Dataset):
-    def __init__(self, df, transform=None):
+    def __init__(self, df, sens_attribute, transform=None):
+
+        assert sens_attribute is not None
+
         self.df = df
         self.transform = transform
+        self.sens_attribute = sens_attribute
         self.classes = self.get_num_classes()
         self.class_to_idx = self._get_class_to_idx()
 
@@ -44,8 +48,14 @@ class HAM10000Dataset(Dataset):
         image = read_image(self.df.iloc[idx]['Path'], mode=ImageReadMode.RGB)
         image = T.ToPILImage()(image)
         label = torch.tensor(self.df.iloc[idx]['dx_index'])
-        sens_attribute = self.df.iloc[idx]['sex']
 
+        if(self.sens_attribute == 'gender'):
+            sens_attribute = self.df.iloc[idx]['sex']
+        elif(self.sens_attribute == 'age'):
+            sens_attribute = self.df.iloc[idx]['Age_multi']
+        else:
+            raise ValueError('Invalid sensitive attribute for HAM10000 dataset')
+        
         if self.transform:
             image = self.transform(image)
         

@@ -96,17 +96,17 @@ def main(args):
         # columns=['Tuning Method','Train Percent','LR Scaler', 'Inner LR', 'Outer LR','Test Acc@1','Vector Path']
         print("Creating new results dataframe")
         if(args.sens_attribute == 'gender'):
-            results_df = pd.DataFrame(
-                columns=[
-                    "Tuning Method",
-                    "Train Percent",
-                    "LR",
-                    "Test Acc@1",
-                    "Test Acc Male",
-                    "Test Acc Female",
-                    "Test Acc Difference",
-                ]
-            )
+            # results_df = pd.DataFrame(
+            #     columns=[
+            #         "Tuning Method",
+            #         "Train Percent",
+            #         "LR",
+            #         "Test Acc@1",
+            #         "Test Acc Male",
+            #         "Test Acc Female",
+            #         "Test Acc Difference",
+            #     ]
+            # )
             test_results_df = pd.DataFrame(
                 columns=[
                     "Tuning Method",
@@ -121,18 +121,18 @@ def main(args):
                     "Vector Path",
                 ]
             )   
-        elif(args.sens_attribute == 'skin_type'):
-            results_df = pd.DataFrame(
-                columns=[
-                    "Tuning Method",
-                    "Train Percent",
-                    "LR",
-                    "Test Acc@1",
-                    "Test Acc Male",
-                    "Test Acc Female",
-                    "Test Acc Difference",
-                ]
-            )
+        elif(args.sens_attribute == 'skin_type' or args.sens_attribute == 'age'):
+            # results_df = pd.DataFrame(
+            #     columns=[
+            #         "Tuning Method",
+            #         "Train Percent",
+            #         "LR",
+            #         "Test Acc@1",
+            #         "Test Acc Male",
+            #         "Test Acc Female",
+            #         "Test Acc Difference",
+            #     ]
+            # )
             test_results_df = pd.DataFrame(
                 columns=[
                     "Tuning Method",
@@ -204,7 +204,7 @@ def main(args):
         sampler=val_sampler,
         num_workers=args.workers,
         pin_memory=True,
-        drop_last=True
+        #drop_last=True
     )
     data_loader_test = torch.utils.data.DataLoader(
         dataset_test,
@@ -241,9 +241,17 @@ def main(args):
     if args.distributed and args.sync_bn:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
+    # if(args.num_classes > 2):
+    #     criterion = nn.CrossEntropyLoss(
+    #         label_smoothing=args.label_smoothing, reduction="none"
+    #     )
+    # else:
+    #     criterion = nn.BCEWithLogitsLoss(reduction="none")
+
     criterion = nn.CrossEntropyLoss(
-        label_smoothing=args.label_smoothing, reduction="none"
-    )
+            label_smoothing=args.label_smoothing, reduction="none"
+        )
+
     ece_criterion = utils.ECELoss()
 
     custom_keys_weight_decay = []
@@ -294,90 +302,78 @@ def main(args):
         if scaler:
             scaler.load_state_dict(checkpoint["scaler"])
 
-    if args.test_only:
-        # We disable the cudnn benchmarking because it can noticeably affect the accuracy
-        torch.backends.cudnn.benchmark = False
-        torch.backends.cudnn.deterministic = True
-        if args.sens_attribute == "gender":
-            (
-                test_acc,
-                test_male_acc,
-                test_female_acc,
-                test_loss,
-                test_max_loss,
-            ) = evaluate_fairness_gender(
-                model_ema,
-                criterion,
-                ece_criterion,
-                data_loader_test,
-                args=args,
-                device=device,
-                log_suffix="EMA",
-                pos_label=0,
-            )
-        elif args.sens_attribute == "skin_type":
-            (
-                test_acc,
-                test_acc_type0,
-                test_acc_type1,
-                test_acc_type2,
-                test_acc_type3,
-                test_acc_type4,
-                test_acc_type5,
-                test_loss,
-                test_max_loss,
-            ) = evaluate_fairness_skin_type(
-                model_ema,
-                criterion,
-                ece_criterion,
-                data_loader_test,
-                args=args,
-                device=device,
-                log_suffix="EMA",
-                pos_label=0,
-            )
-        elif args.sens_attribute == "age":
-            raise NotImplementedError
-        else:
-            if args.sens_attribute == "gender":
-                (
-                    test_acc,
-                    test_male_acc,
-                    test_female_acc,
-                    test_loss,
-                    test_max_loss,
-                ) = evaluate_fairness_gender(
-                    model,
-                    criterion,
-                    ece_criterion,
-                    data_loader_test,
-                    args=args,
-                    device=device,
-                    pos_label=0,
-                )
-            elif args.sens_attribute == "skin_type":
-                (
-                    test_acc,
-                    test_acc_type0,
-                    test_acc_type1,
-                    test_acc_type2,
-                    test_acc_type3,
-                    test_acc_type4,
-                    test_acc_type5,
-                    test_loss,
-                    test_max_loss,
-                ) = evaluate_fairness_skin_type(
-                    model,
-                    criterion,
-                    ece_criterion,
-                    data_loader_test,
-                    args=args,
-                    device=device,
-                    pos_label=0,
-                )
-            elif args.sens_attribute == "age":
-                raise NotImplementedError
-        return
+    # if args.test_only:
+    #     # We disable the cudnn benchmarking because it can noticeably affect the accuracy
+    #     torch.backends.cudnn.benchmark = False
+    #     torch.backends.cudnn.deterministic = True
+    #     if args.sens_attribute == "gender":
+
+    #         test_acc, test_male_acc, test_female_acc, test_loss, test_max_loss = evaluate_fairness_gender(
+    #             model_ema,
+    #             criterion,
+    #             ece_criterion,
+    #             data_loader_test,
+    #             args=args,
+    #             device=device,
+    #             log_suffix="EMA",
+    #             pos_label=0,
+    #         )
+
+    #     elif args.sens_attribute == "skin_type":
+            
+    #             test_acc, test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5, test_loss, test_max_loss = evaluate_fairness_skin_type(
+    #                 model_ema,
+    #                 criterion,
+    #                 ece_criterion,
+    #                 data_loader_test,
+    #                 args=args,
+    #                 device=device,
+    #                 log_suffix="EMA",
+    #                 pos_label=0,
+    #             )
+             
+    #     elif args.sens_attribute == "age":
+    #         raise NotImplementedError
+    #     else:
+    #         if args.sens_attribute == "gender":
+    #             (
+    #                 test_acc,
+    #                 test_male_acc,
+    #                 test_female_acc,
+    #                 test_loss,
+    #                 test_max_loss,
+    #             ) = evaluate_fairness_gender(
+    #                 model,
+    #                 criterion,
+    #                 ece_criterion,
+    #                 data_loader_test,
+    #                 args=args,
+    #                 device=device,
+    #                 pos_label=0,
+    #             )
+    #         elif args.sens_attribute == "skin_type":
+    #             (
+    #                 test_acc,
+    #                 test_acc_type0,
+    #                 test_acc_type1,
+    #                 test_acc_type2,
+    #                 test_acc_type3,
+    #                 test_acc_type4,
+    #                 test_acc_type5,
+    #                 test_loss,
+    #                 test_max_loss,
+    #             ) = evaluate_fairness_skin_type(
+    #                 model,
+    #                 criterion,
+    #                 ece_criterion,
+    #                 data_loader_test,
+    #                 args=args,
+    #                 device=device,
+    #                 pos_label=0,
+    #             )
+    #         elif args.sens_attribute == "age":
+    #             raise NotImplementedError
+    #     return
 
     if args.disable_training:
         print("Training Process Skipped")
@@ -445,7 +441,7 @@ def main(args):
                     device=device,
                 )
                 print(
-                    "Val Acc: {:.2f}, Val Type 0 Acc: {:.2f}, Val Type 1 Acc: {:.2f}, Val Type 2 Acc: {:.2f}, Val Type 3 Acc: {:.2f}, Val Type 4 Acc: {:.2f}, Val Type 5 Acc: {:.2f}, Val MAX LOSS: {:.2f}".format(
+                    "Val Acc: {:.2f}, Val Type 0 Acc: {:.2f}, Val Type 1 Acc: {:.2f}, Val Type 2 Acc: {:.2f}, Val Type 3 Acc: {:.2f}, Val Type 4 Acc: {:.2f}, Val Type 5 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
                         val_acc,
                         val_acc_type0,
                         val_acc_type1,
@@ -453,6 +449,36 @@ def main(args):
                         val_acc_type3,
                         val_acc_type4,
                         val_acc_type5,
+                        torch.mean(val_loss),
+                        val_max_loss,
+                    )
+                )
+            elif args.sens_attribute == "age":
+                (
+                    val_acc,
+                    acc_age0_avg,
+                    acc_age1_avg,
+                    acc_age2_avg,
+                    acc_age3_avg,
+                    acc_age4_avg,
+                    val_loss,
+                    val_max_loss,
+                ) = evaluate_fairness_age(
+                    model,
+                    criterion,
+                    ece_criterion,
+                    data_loader_val,
+                    args=args,
+                    device=device,
+                )
+                print(
+                    "Val Acc: {:.2f}, Val Age Group0 Acc: {:.2f}, Val Age Group1 Acc: {:.2f}, Val Age Group2 Acc: {:.2f}, Val Age Group3 Acc: {:.2f}, Val Age Group4 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
+                        val_acc,
+                        acc_age0_avg,
+                        acc_age1_avg,
+                        acc_age2_avg,
+                        acc_age3_avg,
+                        acc_age4_avg,
                         torch.mean(val_loss),
                         val_max_loss,
                     )
@@ -526,6 +552,20 @@ def main(args):
                     abs(best_acc - worst_acc),
                     mask_filename,
                 ]
+            elif(args.sens_attribute == 'age'):
+                best_acc = max(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
+                worst_acc = min(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
+
+                new_row = [
+                    args.tuning_method,
+                    trainable_percentage,
+                    args.lr,
+                    val_acc,
+                    best_acc,
+                    worst_acc,
+                    abs(best_acc - worst_acc),
+                    mask_filename,
+                ]
 
         elif args.masking_vector is not None or args.subnetwork_mask_name is not None:
             new_row = [
@@ -555,12 +595,6 @@ def main(args):
                     os.path.join(args.vector_savepath, filename)
                 )
             )
-
-        # print(
-        #     "Saving results df at: {}".format(
-        #         os.path.join(args.output_dir, args.results_df)
-        #     )
-        # )
 
         # Obtaining the performance on test set
         print("Obtaining the performance on test set")
@@ -609,6 +643,34 @@ def main(args):
             print("Test Type 4 Accuracy: ", test_acc_type4)
             print("Test Type 5 Accuracy: ", test_acc_type5)
 
+        elif(args.sens_attribute == 'age'):
+            (
+                test_acc,
+                test_acc_type0,
+                test_acc_type1,
+                test_acc_type2,
+                test_acc_type3,
+                test_acc_type4,
+                test_loss,
+                test_max_loss,
+            ) = evaluate_fairness_age(
+                model,
+                criterion,
+                ece_criterion,
+                data_loader_test,
+                args=args,
+                device=device,
+            )
+            print("\n")
+            print("Test Age Group 0 Accuracy: ", test_acc_type0)
+            print("Test Age Group 1 Accuracy: ", test_acc_type1)
+            print("Test Age Group 2 Accuracy: ", test_acc_type2)
+            print("Test Age Group 3 Accuracy: ", test_acc_type3)
+            print("Test Age Group 4 Accuracy: ", test_acc_type4)
+            
+        else:
+            raise NotImplementedError
+
         print("Test accuracy: ", test_acc)
         print("Test loss: ", round(torch.mean(test_loss).item(), 3))
         print("Test max loss: ", round(test_max_loss.item(), 3))
@@ -631,9 +693,13 @@ def main(args):
                     round(abs(test_male_acc - test_female_acc), 3),
                     mask_filename,
                 ]
-            elif(args.sens_attribute == 'skin_type'):
-                best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
-                worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
+            else:
+                if(args.sens_attribute == 'skin_type'):
+                    best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
+                    worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
+                elif(args.sens_attribute == 'age'):
+                    best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4)
+                    worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4)
 
                 new_row2 = [
                     args.tuning_method,
@@ -647,6 +713,7 @@ def main(args):
                     round(abs(best_acc - worst_acc), 3),
                     mask_filename,
                 ]
+            
         elif args.masking_vector is not None or args.subnetwork_mask_name is not None:
             new_row2 = [
                 "Subnetwork_" + args.tuning_method,
