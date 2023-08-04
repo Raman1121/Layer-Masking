@@ -86,7 +86,7 @@ def main(args):
                         "Vector Path",
                     ]
                 )
-        elif(args.sens_attribute == 'skin_type'):
+        elif(args.sens_attribute == 'skin_type' or args.sens_attribute == 'age'):
             test_results_df = pd.DataFrame(
                 columns=[
                     "Tuning Method",
@@ -351,6 +351,26 @@ def main(args):
                     pos_label=0,
             )
             elif(args.sens_attribute == 'age'):
+                (
+                test_acc,
+                test_acc_type0,
+                test_acc_type1,
+                test_acc_type2,
+                test_acc_type3,
+                test_acc_type4,
+                test_loss,
+                test_max_loss,
+                ) = evaluate_fairness_age(
+                        model_ema,
+                        criterion,
+                        ece_criterion,
+                        data_loader_test,
+                        args=args,
+                        device=device,
+                        log_suffix="EMA",
+                        pos_label=0,
+                )
+            else:
                 raise NotImplementedError
         else:
             if(args.sens_attribute == 'gender'):
@@ -384,7 +404,24 @@ def main(args):
                     pos_label=0,
                 )
             elif(args.sens_attribute == 'age'):
-                raise NotImplementedError
+                (
+                    test_acc,
+                    test_acc_type0,
+                    test_acc_type1,
+                    test_acc_type2,
+                    test_acc_type3,
+                    test_acc_type4,
+                    test_loss,
+                    test_max_loss,
+                ) = evaluate_fairness_age(
+                    model,
+                    criterion,
+                    ece_criterion,
+                    data_loader_test,
+                    args=args,
+                    device=device,
+                    pos_label=0,
+                )
         return
 
     # INNER LOOP: TRAINING PROCESS HERE
@@ -437,6 +474,17 @@ def main(args):
                 num_type5 = 0
                 num_type6 = 0
             elif(args.sens_attribute == 'age'):
+                total_loss_type1 = 0.0
+                total_loss_type2 = 0.0
+                total_loss_type3 = 0.0
+                total_loss_type4 = 0.0
+                total_loss_type5 = 0.0
+                num_type1 = 0
+                num_type2 = 0
+                num_type3 = 0
+                num_type4 = 0
+                num_type5 = 0
+            else:
                 raise NotImplementedError
 
             for i, ((image, target, sens_attr), (image_val, target_val, sens_attr_val)) in enumerate(loaders):
@@ -551,13 +599,9 @@ def main(args):
                         #num_female += torch.sum(sens_attr_val == 'F').item()
                         num_male += sens_attr_val.count('M')
                         num_female += sens_attr_val.count('F')
-                    
                             
                         avg_loss_male = total_loss_male / num_male if num_male > 0 else 0.0
                         avg_loss_female = total_loss_female / num_female if num_female > 0 else 0.0
-
-                        # import pdb
-                        # pdb.set_trace()
 
                         # Take the maximum of the two losses
                         meta_loss = max(avg_loss_male, avg_loss_female)
@@ -627,6 +671,46 @@ def main(args):
                         meta_loss = max(avg_loss_type1, avg_loss_type2, avg_loss_type3, avg_loss_type4, avg_loss_type5, avg_loss_type6)
 
                     elif(args.sens_attribute == 'age'):
+                        # Separate losses for each age group
+
+                        # Separate losses for each age group
+
+                        sens_attr_val = sens_attr_val.tolist()
+
+                        idx_type1 = [index for index, _age_group in enumerate(sens_attr_val) if _age_group == 0]
+                        idx_type2 = [index for index, _age_group in enumerate(sens_attr_val) if _age_group == 1]
+                        idx_type3 = [index for index, _age_group in enumerate(sens_attr_val) if _age_group == 2]
+                        idx_type4 = [index for index, _age_group in enumerate(sens_attr_val) if _age_group == 3]
+                        idx_type5 = [index for index, _age_group in enumerate(sens_attr_val) if _age_group == 4]
+
+                        loss_type1 = [val_loss[index] for index in idx_type1]
+                        loss_type2 = [val_loss[index] for index in idx_type2]
+                        loss_type3 = [val_loss[index] for index in idx_type3]
+                        loss_type4 = [val_loss[index] for index in idx_type4]
+                        loss_type5 = [val_loss[index] for index in idx_type5]
+
+                        total_loss_type1 = sum(loss_type1)
+                        total_loss_type2 = sum(loss_type2)
+                        total_loss_type3 = sum(loss_type3)
+                        total_loss_type4 = sum(loss_type4)
+                        total_loss_type5 = sum(loss_type5)
+
+                        #num_type1 += torch.sum(sens_attr_val == 0).item()
+                        num_type1 += sens_attr_val.count(0)
+                        num_type2 += sens_attr_val.count(1)
+                        num_type3 += sens_attr_val.count(2)
+                        num_type4 += sens_attr_val.count(3)
+                        num_type5 += sens_attr_val.count(4)
+
+                        avg_loss_type1 = total_loss_type1 / num_type1 if num_type1 > 0 else 0.0
+                        avg_loss_type2 = total_loss_type2 / num_type2 if num_type2 > 0 else 0.0
+                        avg_loss_type3 = total_loss_type3 / num_type3 if num_type3 > 0 else 0.0
+                        avg_loss_type4 = total_loss_type4 / num_type4 if num_type4 > 0 else 0.0
+                        avg_loss_type5 = total_loss_type5 / num_type5 if num_type5 > 0 else 0.0
+
+                        # Take the maximum of all the losses
+                        meta_loss = max(avg_loss_type1, avg_loss_type2, avg_loss_type3, avg_loss_type4, avg_loss_type5)
+                    else:
                         raise NotImplementedError
 
                     
@@ -764,6 +848,36 @@ def main(args):
                                     val_max_loss,
                                 )
                             )
+                    elif(args.sens_attribute == 'age'):
+                        (
+                            val_acc,
+                            val_acc_age0,
+                            val_acc_age1,
+                            val_acc_age2,
+                            val_acc_age3,
+                            val_acc_age4,
+                            val_loss,
+                            val_max_loss,
+                        ) = evaluate_fairness_age(
+                            model,
+                            criterion,
+                            ece_criterion,
+                            data_loader_val,
+                            args=args,
+                            device=device,
+                        )
+                        print(
+                                "Val Acc: {:.2f}, Val Type 0 Acc: {:.2f}, Val Type 1 Acc: {:.2f}, Val Type 2 Acc: {:.2f}, Val Type 3 Acc: {:.2f}, Val Type 4 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
+                                    val_acc,
+                                    val_acc_age0,
+                                    val_acc_age1,
+                                    val_acc_age2,
+                                    val_acc_age3,
+                                    val_acc_age4,
+                                    torch.mean(val_loss),
+                                    val_max_loss,
+                                )
+                            )
                     else:
                         raise NotImplementedError
 
@@ -776,6 +890,10 @@ def main(args):
                             wandb.log({"Val Male Accuracy": val_male_acc})
                             wandb.log({"Val Female Accuracy": val_female_acc})
                             wandb.log({"Val Loss": torch.mean(val_loss)})
+                        elif(args.sens_attribute == 'skin_type'):
+                            pass
+                        elif(args.sens_attribute == 'age'):
+                            pass
                         #wandb.log({"Val AUC": val_auc})
 
                     # Re-enabling all the attention blocks
@@ -815,6 +933,23 @@ def main(args):
                     metric_logger.meters["acc_type3"].update(acc_type3.item(), n=batch_size)
                     metric_logger.meters["acc_type4"].update(acc_type4.item(), n=batch_size)
                     metric_logger.meters["acc_type5"].update(acc_type5.item(), n=batch_size)
+                elif(args.sens_attribute == 'age'):
+                    acc1, res_type0, res_type1, res_type2, res_type3, res_type4 = utils.accuracy_by_age(
+                            output, target, sens_attr, topk=(1,), 
+                        )
+                    acc1 = acc1[0]
+                    acc_type0 = res_type0[0]
+                    acc_type1 = res_type1[0]
+                    acc_type2 = res_type2[0]
+                    acc_type3 = res_type3[0]
+                    acc_type4 = res_type4[0]
+
+                    batch_size = image.shape[0]
+                    metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
+                    metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
+                    metric_logger.meters["acc_Age2"].update(acc_type2.item(), n=batch_size)
+                    metric_logger.meters["acc_Age3"].update(acc_type3.item(), n=batch_size)
+                    metric_logger.meters["acc_Age4"].update(acc_type4.item(), n=batch_size)
                 else:
                     raise NotImplementedError
                 
@@ -982,6 +1117,33 @@ def main(args):
             print("Val Type 5 acc: ", val_acc_type5)
             print("Val loss: ", torch.mean(val_loss))
             print("Val max loss: ", val_max_loss)
+        elif(args.sens_attribute == 'age'):
+            (
+                val_acc,
+                val_acc_type0,
+                val_acc_type1,
+                val_acc_type2,
+                val_acc_type3,
+                val_acc_type4,
+                val_loss,
+                val_max_loss,
+            ) = evaluate_fairness_age(
+                model,
+                criterion,
+                ece_criterion,
+                data_loader_val,
+                args=args,
+                device=device,
+            )
+
+            print("Val accuracy: ", val_acc)
+            print("Val Age Group 0 acc: ", val_acc_type0)
+            print("Val Age Group 1 acc: ", val_acc_type1)
+            print("Val Age Group 2 acc: ", val_acc_type2)
+            print("Val Age Group 3 acc: ", val_acc_type3)
+            print("Val Age Group 4 acc: ", val_acc_type4)
+            print("Val loss: ", torch.mean(val_loss))
+            print("Val max loss: ", val_max_loss)
         else:
             raise NotImplementedError
 
@@ -1000,6 +1162,7 @@ def main(args):
             print("Test accuracy: ", test_acc)
             print("Test Male Accuracy: ", test_male_acc)
             print("Test Female Accuracy: ", test_female_acc)
+
         elif(args.sens_attribute == 'skin_type'):
             (
                 test_acc,
@@ -1026,6 +1189,31 @@ def main(args):
             print("Test Type 3 Accuracy: ", test_acc_type3)
             print("Test Type 4 Accuracy: ", test_acc_type4)
             print("Test Type 5 Accuracy: ", test_acc_type5)
+
+        elif(args.sens_attribute == 'age'):
+            (
+                test_acc,
+                test_acc_type0,
+                test_acc_type1,
+                test_acc_type2,
+                test_acc_type3,
+                test_acc_type4,
+                test_loss,
+                test_max_loss,
+            ) = evaluate_fairness_age(
+                model,
+                criterion,
+                ece_criterion,
+                data_loader_test,
+                args=args,
+                device=device,
+            )
+            print("\n")
+            print("Test Age Group 0 Accuracy: ", test_acc_type0)
+            print("Test Age Group 1 Accuracy: ", test_acc_type1)
+            print("Test Age Group 2 Accuracy: ", test_acc_type2)
+            print("Test Age Group 3 Accuracy: ", test_acc_type3)
+            print("Test Age Group 4 Accuracy: ", test_acc_type4)
         else:
             raise NotImplementedError
 
@@ -1095,9 +1283,13 @@ def main(args):
                 round(abs(test_male_acc - test_female_acc), 3),
                 np.nan
             ]
-        elif args.sens_attribute == "skin_type":
-            best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
-            worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
+        else:
+            if(args.sens_attribute == "skin_type"):
+                best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
+                worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
+            elif(args.sens_attribute == "age"):
+                best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4)
+                worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4)
 
             new_row = [
                 method_name,
@@ -1111,8 +1303,6 @@ def main(args):
                 round(abs(best_acc - worst_acc), 3),
                 np.nan
             ]
-        else:
-            raise NotImplementedError
         
         test_results_df.loc[len(test_results_df)] = new_row
         test_results_df.to_csv(
