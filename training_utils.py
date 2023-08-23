@@ -307,29 +307,33 @@ def get_attn_params(model):
 
 def get_fast_params(model, args):
     fast_params = []
+    param_names= []
 
     # Get fast parameters from each module
     if args.tuning_method == "tune_attention_blocks_random":
         for name, module in model.named_modules():
-            if "_fw" in module.__class__.__name__:
-                for n, param in module.named_parameters():
-                    if "attn" in n:
+            if "fw" in module.__class__.__name__:
+                if("attn" in name):
+                    for n, param in module.named_parameters():
                         fast_params.append(param)
+                        param_names.append(n)
 
     elif args.tuning_method == "tune_layernorm_blocks_random":
         for name, module in model.named_modules():
-            if "_fw" in module.__class__.__name__:
-                for n, param in module.named_parameters():
-                    if "norm" in n:
+            if "fw" in module.__class__.__name__:
+                if "norm" in name:
+                    for n, param in module.named_parameters():
                         fast_params.append(param)
+                        param_names.append(n)
 
     elif args.tuning_method == "tune_blocks_random":
         for name, module in model.named_modules():
-            if "_fw" in module.__class__.__name__:
+            if "fw" in module.__class__.__name__:
                 for n, param in module.named_parameters():
                     fast_params.append(param)
+                    param_names.append(n)
 
-    return fast_params
+    return fast_params, param_names
 
 
 # def get_params(model, args):

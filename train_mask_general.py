@@ -115,7 +115,7 @@ def main(args):
 
     # Create the mask
     
-    if(args.tuning_method == 'tune_attention_blocks_random' or args.tuning_method == 'tune_blocks_random'):
+    if(args.tuning_method == 'tune_attention_blocks_random' or args.tuning_method == 'tune_blocks_random' or args.tuning_method == 'tune_layernorm_blocks_random'):
         mask_length = len(model.blocks)
     elif(args.tuning_method == 'tune_attention_params_random'):
         mask_length = len(model.blocks) * 4
@@ -146,8 +146,12 @@ def main(args):
             wandb.log({"Threshold": threshold})
     else:
         threshold = 1.0
+
+    if args.use_gumbel_sigmoid:
+        binary_mask = gumbel_sigmoid(args.mask, hard=True)
+    else:
+        binary_mask = args.mask >= threshold
     
-    binary_mask = args.mask >= threshold
     binary_mask = binary_mask.long()
 
     BINARY_MASK_DICT = track_mask(binary_mask, BINARY_MASK_DICT)
@@ -275,17 +279,9 @@ def main(args):
                 image, target = image.to(device), target.to(device)
                 image_val, target_val = image_val.to(device), target_val.to(device)
 
-                #print(target_val)
-
-                # import pdb
-                # pdb.set_trace()
-
                 #Reset the fast weights
-                # attn_params = get_attn_params(model)
-                # for k, weight in enumerate(attn_params):
-                #     weight.fast = None
 
-                params = get_fast_params(model, args)
+                params, param_names = get_fast_params(model, args)
                 for k, weight in enumerate(params):
                     weight.fast = None
 
@@ -297,21 +293,13 @@ def main(args):
                     ece_loss = ece_criterion(output, target)
 
                     # Calculate the gradients here manually
-                    # 1. Collect attention parameters
+                    # 1. Collect the parameters
                     
-                    #attn_params = get_attn_params(model)
-                    params = get_fast_params(model, args)   # Here we assume that all parameters are fast parameters?
-                    #print("All params trainable" if not check_trainability(attn_params) else "Not all params trainable")
+                    params, param_names = get_fast_params(model, args)   # Here we assume that all parameters are fast parameters?
                     print("Loss: ", loss.item())
 
+                    grad = torch.autograd.grad(loss, params, create_graph=True)
 
-                    # 2. Calculate the gradients (manually)
-                    try:
-                        #grad = torch.autograd.grad(loss, attn_params, create_graph=True)
-                        grad = torch.autograd.grad(loss, params, create_graph=True)
-                    except:
-                        import pdb
-                        pdb.set_trace()
                     inner_lr = lr_scheduler_inner.get_last_lr()[-1]
 
                     if(args.wandb_logging):
@@ -323,20 +311,52 @@ def main(args):
                             wandb.log({"Outer LR": args.outer_lr})
 
                     # 3. Update the attention parameters using the update equation
-                    #for k, weight in enumerate(attn_params):
-                    print("Number of params: ", len(params))
 
                     if(args.tuning_method == 'tune_attention_blocks_random' or args.tuning_method == 'tune_attention_params_random'):
                         m = 4 #4 (attention) params in each block with fast weights
+                    elif(args.tuning_method == 'tune_layernorm_blocks_random'):
+                        m = 4 #4 (norm) params in each block with fast weights
                     elif(args.tuning_method == 'tune_blocks_random'):
                         m = 12 #12 params in each block with fast weights
 
                     for k, weight in enumerate(params):
                         if weight.fast is None:
-                            weight.fast = weight - inner_lr * args.lr_scaler * args.mask[k//m] * grad[k]
+                            #weight.fast = weight - inner_lr * args.lr_scaler * args.mask[k//m] * grad[k]
+                            if args.use_gumbel_sigmoid:
+                                weight.fast = (
+                                    weight
+                                    - inner_lr
+                                    * args.lr_scaler
+                                    * gumbel_sigmoid(args.mask[k // 4], hard=True)
+                                    * grad[k]
+                                )
+                            else:
+                                weight.fast = (
+                                        weight
+                                        - inner_lr
+                                        * args.lr_scaler
+                                        * args.mask[k // 4]
+                                        * grad[k]
+                                    )
                         else:
                             #attn_params[k] = weight.fast - args.inner_lr * args.mask[k] * grad[k]   
-                            weight.fast = weight.fast - inner_lr * args.lr_scaler * args.mask[k//m] * grad[k]   
+                            #weight.fast = weight.fast - inner_lr * args.lr_scaler * args.mask[k//m] * grad[k]   
+                            if args.use_gumbel_sigmoid:
+                                weight.fast = (
+                                    weight.fast
+                                    - inner_lr
+                                    * args.lr_scaler
+                                    * gumbel_sigmoid(args.mask[k // 4], hard=True)
+                                    * grad[k]
+                                )
+                            else:
+                                weight.fast = (
+                                    weight.fast
+                                    - inner_lr
+                                    * args.lr_scaler
+                                    * args.mask[k // 4]
+                                    * grad[k]
+                                )
 
                     # 4. TODO: We might need to clip the mask between 0 and 1
 
@@ -371,12 +391,15 @@ def main(args):
                     else:
                         threshold = 1.0
                     
-                    binary_mask = args.mask >= threshold
-                    binary_mask = binary_mask.long()
+                    if args.use_gumbel_sigmoid:
+                        binary_mask = gumbel_sigmoid(args.mask, hard=True)
+                    else:
+                        binary_mask = args.mask >= threshold
+                        binary_mask = binary_mask.long()
 
-                    if(args.wandb_logging):
-                        binary_mask_fig_arr = plot_binary_mask(binary_mask)
-                        BINARY_MASK_PLOT_ARRAYS.append(binary_mask_fig_arr)
+                    # if(args.wandb_logging):
+                    #     binary_mask_fig_arr = plot_binary_mask(binary_mask)
+                    #     BINARY_MASK_PLOT_ARRAYS.append(binary_mask_fig_arr)
 
                     ## APPLY THE UPDATED MASK
                     # TODO: Implement different methods for applying mask here
@@ -388,8 +411,8 @@ def main(args):
                                 disable_module(block.attn)
                     elif(args.tuning_method == 'tune_attention_params_random'):
                         #attn_params = [p for name_p, p in model.named_parameters() if '.attn.' in name_p or 'attention' in name_p]
-                        params = [p for name_p, p in model.named_parameters() if '.attn.' in name_p or 'attention' in name_p]
-                        for idx, p in enumerate(params):
+                        attn_params = [p for name_p, p in model.named_parameters() if '.attn.' in name_p or 'attention' in name_p]
+                        for idx, p in enumerate(attn_params):
                             if(binary_mask[idx] == 1):
                                 p.requires_grad = True
                             else:
@@ -450,28 +473,24 @@ def main(args):
                         wandb.log({"Val AUC": val_auc})
                     
 
-                    # Re-enabling all the attention blocks
-                    for idx, block in enumerate(model.blocks):
-                        enable_module(block.attn)
+                    # Re-enabling all the attention/ norm blocks
+                    if(args.tuning_method == 'tune_attention_blocks_random'):
+                        for idx, block in enumerate(model.blocks):
+                            enable_module(block.attn)
+                    elif(args.tuning_method == 'tune_layernorm_blocks_random'):
+                        for idx, block in enumerate(model.blocks):
+                            enable_module(block.norm1)
+                            enable_module(block.norm2)
+                    elif(args.tuning_method == 'tune_blocks_random'):
+                        for idx, block in enumerate(model.blocks):
+                            enable_module(block)
+                    else:
+                        raise NotImplementedError
 
                     print("MASK: ", args.mask)
                     MASK_DICT = track_mask(args.mask, MASK_DICT)
                     BINARY_MASK_DICT = track_mask(binary_mask, BINARY_MASK_DICT)
-
-                    if(args.wandb_logging):
-
-                        #_df_mask = pd.DataFrame(MASK_DICT)
-                        _df_binary_mask = pd.DataFrame(BINARY_MASK_DICT)
-                        #table = wandb.Table(dataframe=_df_mask)
-                        
-                        binary_table = wandb.Table(dataframe=_df_binary_mask)
-
-                        #wandb.log({"Mask Params": table, "Binary Mask Params": binary_table})
-                        #wandb.log({"Mask Params": table})
-                        wandb.log({"Mask Params": binary_table})
                     
-                    print("\n")
-
                 acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
                 batch_size = image.shape[0]
                 metric_logger.update(loss=loss.item(), lr=inner_optimizer.param_groups[0]["lr"])
@@ -479,6 +498,32 @@ def main(args):
                 metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
                 metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
                 metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
+
+            ############################ Logging at epoch level ############################
+            
+            print("\n")
+            print("############################ EPOCH FINISHED ############################")
+
+            print("Mean Trainable Percentage: ", np.mean(track_trainable_params))
+
+            if args.wandb_logging:
+                wandb.log({"Mean Trainable Percentage": np.mean(track_trainable_params)})
+
+            if(args.wandb_logging):
+                _df_binary_mask = pd.DataFrame(BINARY_MASK_DICT)
+                binary_table = wandb.Table(dataframe=_df_binary_mask)
+                wandb.log({"Mask Params": binary_table})
+
+            if args.use_gumbel_sigmoid:
+                print("MASK: ", gumbel_sigmoid(args.mask))
+                print("Binary Mask", gumbel_sigmoid(args.mask, hard=True))
+            else:
+                print("MASK: ", args.mask)
+
+            print("\n")
+
+            MASK_DICT = track_mask(args.mask, MASK_DICT)
+            BINARY_MASK_DICT = track_mask(binary_mask, BINARY_MASK_DICT)
 
             lr_scheduler_inner.step()
 
@@ -499,11 +544,10 @@ def main(args):
                     checkpoint["model_ema"] = model_ema.state_dict()
                 if scaler:
                     checkpoint["scaler"] = scaler.state_dict()
-                #utils.save_on_master(checkpoint, os.path.join(args.output_dir, 'checkpoints', f"model_{epoch}.pth"))7
-                ckpt_path = os.path.join(args.output_dir, 'checkpoints', "meta_checkpoint_" + args.tuning_method + ".pth")
-                utils.save_on_master(checkpoint, ckpt_path)
 
-            
+                ckpt_path = os.path.join(args.output_dir, 'checkpoints', "meta_checkpoint_" + args.tuning_method + ".pth")
+                if not args.disable_checkpointing:
+                    utils.save_on_master(checkpoint, ckpt_path)
 
         print("Training Finished")
 
@@ -562,14 +606,60 @@ def main(args):
                 wandb.log({"Hyper Parameters": mask_el_table})
 
         mask_el_df2 = pd.DataFrame().from_dict(MASK_DICT)
-        print("Saving Mask Tracking Dataframe at: ", os.path.join(args.fig_savepath, 'Mask_Elements_' + args.tuning_method + '_' + args.model + str(args.outer_lr) + '.csv'))
-        mask_el_df2.to_csv(os.path.join(args.fig_savepath, 'Mask_Elements_' + args.tuning_method + '_' + args.model + '_' + str(args.outer_lr) + '.csv'), index=False)
+        print(
+            "Saving Mask Tracking Dataframe at: ",
+            os.path.join(
+                args.fig_savepath,
+                "Mask_Elements_"
+                + args.tuning_method
+                + "_"
+                + args.model
+                + str(args.outer_lr)
+                + ".csv",
+            ),
+        )
+        mask_el_df2.to_csv(
+            os.path.join(
+                args.fig_savepath,
+                "Mask_Elements_"
+                + args.tuning_method
+                + "_"
+                + args.model
+                + "_"
+                + str(args.outer_lr)
+                + ".csv",
+            ),
+            index=False,
+        )
+        
+        if args.use_gumbel_sigmoid:
+            method_name = "Dynamic_Gumbel_" + args.tuning_method
+        else:
+            method_name = "Dynamic_" + args.tuning_method
 
+        
+        new_row = [
+            method_name,
+            np.mean(track_trainable_params),
+            args.lr_scaler,
+            args.lr,
+            args.outer_lr,
+            test_acc,
+            np.nan,
+        ]
 
-        #columns=['Tuning Method','Train Percent','LR Scaler', 'Inner LR', 'Outer LR','Test Acc@1','Vector Path']
-        new_row = ['Dynamic_'+args.tuning_method, np.mean(track_trainable_params), args.lr_scaler, args.lr, args.outer_lr, test_acc, np.nan]
         test_results_df.loc[len(test_results_df)] = new_row
-        test_results_df.to_csv(os.path.join(args.output_dir, args.test_results_df), index=False)
+        test_results_df.to_csv(
+            os.path.join(args.output_dir, args.test_results_df), index=False
+        )
+
+        print("Saving Binary Vector at: ", args.binary_mask_savepath)
+        
+        #Making the directory if it doesn't exist
+        if not os.path.exists(args.binary_mask_savepath):
+            os.makedirs(args.binary_mask_savepath)
+        mask_name = "test_acc_{:.2f}_outerlr_{:.4f}_scaler_{}".format(test_acc, args.outer_lr, int(args.lr_scaler)) + ".npy"
+        np.save(os.path.join(args.binary_mask_savepath, mask_name), gumbel_sigmoid(args.mask, hard=True).detach().cpu().numpy())
     
 
 if __name__ == "__main__":

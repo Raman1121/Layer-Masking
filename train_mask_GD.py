@@ -209,9 +209,12 @@ def main(args):
     BINARY_MASK_PLOT_ARRAYS.append(binary_mask_fig_arr)
 
     # Disabling all parameters except attention
-    for name, param in model.named_parameters():
-        if "attn" not in name:
-            param.requires_grad = False
+    if("attention" in args.tuning_method):
+        for name, param in model.named_parameters():
+            if "attn" not in name:
+                param.requires_grad = False
+    else:
+        raise NotImplementedError
 
     enable_module(model.head)
 
@@ -345,11 +348,6 @@ def main(args):
                 image, target = image.to(device), target.to(device)
                 image_val, target_val = image_val.to(device), target_val.to(device)
 
-                # print(target_val)
-
-                # import pdb
-                # pdb.set_trace()
-
                 # Reset the fast weights
                 attn_params = get_attn_params(model)
                 for k, weight in enumerate(attn_params):
@@ -374,8 +372,8 @@ def main(args):
                         grad = torch.autograd.grad(loss, attn_params, create_graph=True)
                     except:
                         import pdb
-
                         pdb.set_trace()
+
                     inner_lr = lr_scheduler_inner.get_last_lr()[-1]
 
                     if args.wandb_logging:
