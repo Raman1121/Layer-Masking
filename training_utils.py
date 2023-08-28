@@ -134,7 +134,7 @@ def train_one_epoch_fairness(
             #     #We are using Binary Cross Entropy Loss
             #     output = output.view(-1)
 
-            print(output.dtype, target.dtype)
+            #print(output.dtype, target.dtype)
             #print(output, target)
             loss = torch.mean(criterion(output, target))
 
@@ -1089,7 +1089,7 @@ def evaluate_fairness_age(
             metric_logger.update(ece_loss=ece_loss.item())
             metric_logger.update(max_val_loss=max_val_loss)
             metric_logger.update(diff_loss=diff_loss)
-            metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
+            metric_logger.meters["acc1"].update(acc1_orig.item(), n=batch_size)
             metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
             metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
             metric_logger.meters["acc_Age2"].update(acc_type2.item(), n=batch_size)
@@ -1566,6 +1566,8 @@ def get_data(args):
             path = os.path.join(args.dataset_basepath, "Pneumonia_Detection/")
         elif args.dataset == "smdg":
             path = os.path.join(args.dataset_basepath, "SMDG/")
+        elif args.dataset == "papila":
+            path = os.path.join(args.dataset_basepath, "PAPILA/")
         else:
             raise NotImplementedError
 

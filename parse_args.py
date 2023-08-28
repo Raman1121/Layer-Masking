@@ -357,4 +357,7 @@ def get_args_parser(add_help=True):
                         default=None,
                         help='Sensitive attribute to be used for fairness')
 
+    # HPARAM OPT Arguements
+    parser.add_argument("--objective_metric", type=str, default="acc_diff")
+
     return parser
