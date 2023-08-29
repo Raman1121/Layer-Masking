@@ -43,6 +43,7 @@ def main(args):
     1. Read from saved path (Saved vectors for random search)
     2. Read from command line
     3. Read from saved path (Saved vectors after Gradient Search)
+    4. Read directly from a path (Optuna Search)
     """
 
     if masking_idx is not None:
@@ -60,6 +61,9 @@ def main(args):
         mask = np.load(
             os.path.join(args.binary_mask_savepath, args.subnetwork_mask_name)
         ).astype(int)
+    
+    elif args.mask_path is not None:
+        mask = np.load(args.mask_path).astype(int)
 
     else:
         mask = None

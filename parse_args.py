@@ -297,6 +297,8 @@ def get_args_parser(add_help=True):
                         help='Elements of the masking vector')
     
     parser.add_argument("--subnetwork_mask_name", type=str, default=None)
+
+    parser.add_argument("--mask_path", type=str, default=None)
     
     parser.add_argument(
         "--exp_vector_path",

@@ -140,23 +140,27 @@ def tune_blocks_random(model, mask, segment):
             bit = mask[idx]
 
         if bit == 1:
-            print("Enabling {} in Block {}".format(segment, idx))
+            #print("Enabling {} in Block {}".format(segment, idx))
             if segment == "attention":
                 enable_module(block.attn)
             elif segment == "layernorm":
                 enable_module(block.norm1)
                 enable_module(block.norm2)
+            elif segment == "mlp":
+              enable_module(block.mlp)
             elif segment == "full":
                 enable_module(block)
 
             vector.append(1)
         else:
-            print("Disabling {} in Block {}".format(segment, idx))
+            #print("Disabling {} in Block {}".format(segment, idx))
             if segment == "attention":
                 disable_module(block.attn)
             elif segment == "layernorm":
                 disable_module(block.norm1)
                 disable_module(block.norm2)
+            elif segment == "mlp":
+              disable_module(block.mlp)
             elif segment == "full":
                 disable_module(block)
 
@@ -378,6 +382,31 @@ def get_masked_model(model, method, **kwargs):
     elif method == "tune_layernorm_blocks_random":
         disable_module(model)
         vector = tune_blocks_random(model, kwargs["mask"], segment="layernorm")
+    elif method == "tune_mlp_blocks_random":
+        disable_module(model)
+        vector = tune_blocks_random(model, kwargs["mask"], segment="mlp")
+
+    # New Methods
+    elif method == "tune_attention_layernorm":
+        disable_module(model)
+        vector = tune_blocks_random(model, kwargs["mask"], segment="attention")
+        vector = tune_blocks_random(model, kwargs["mask"], segment="layernorm")
+    elif method == "tune_attention_mlp":
+        disable_module(model)
+        vector = tune_blocks_random(model, kwargs["mask"], segment="attention")
+        vector = tune_blocks_random(model, kwargs["mask"], segment="mlp")
+    elif method == "tune_layernorm_mlp":
+        disable_module(model)
+        vector = tune_blocks_random(model, kwargs["mask"], segment="layernorm")
+        vector = tune_blocks_random(model, kwargs["mask"], segment="mlp")
+    elif method == "tune_attention_layernorm_mlp":
+        disable_module(model)
+        vector = tune_blocks_random(model, kwargs["mask"], segment="attention")
+        vector = tune_blocks_random(model, kwargs["mask"], segment="layernorm")
+        vector = tune_blocks_random(model, kwargs["mask"], segment="mlp")
+    elif method == "tune_full_block":
+        disable_module(model)
+        vector = tune_blocks_random(model, kwargs["mask"], segment="full")
     else:
         raise NotImplementedError
 

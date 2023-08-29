@@ -34,7 +34,8 @@ from optuna.trial import TrialState
 def create_opt_mask(trial, args, num_blocks):
 
     mask_length = None
-    if(args.tuning_method == 'tune_blocks' or args.tuning_method == 'tune_attention_blocks_random'):
+    #if(args.tuning_method == 'tune_full_block' or args.tuning_method == 'tune_attention_blocks_random'):
+    if(args.tuning_method in ['tune_full_block', 'tune_attention_blocks_random', 'tune_layernorm_blocks_random', 'tune_attention_layernorm', 'tune_attention_mlp', 'tune_layernorm_mlp', 'tune_attention_layernorm_mlp']):
         mask_length = num_blocks
     elif(args.tuning_method == 'tune_attention_params_random'):
         mask_length = num_blocks * 4
