@@ -455,6 +455,17 @@ def objective(trial):
     print("val Accuracy Difference: ", round(acc_diff, 3))
     print("val loss: ", round(torch.mean(val_loss).item(), 3))
     print("val max loss: ", round(val_max_loss.item(), 3))
+
+    # Pruning
+    if(args.objective_metric == 'min_acc'):
+        trial.report(min_acc, epoch)
+    elif(args.objective_metric == 'acc_diff'):
+        trial.report(acc_diff, epoch)
+    elif(args.objective_metric == 'max_loss'):
+        trial.report(val_max_loss, epoch)
+
+    if(trial.should_prune()):
+        raise optuna.exceptions.TrialPruned()
     
     if(args.objective_metric == 'acc_diff'):
         try:
@@ -487,11 +498,23 @@ if __name__ == "__main__":
     else:
         raise NotImplementedError
 
-    study = optuna.create_study(direction=direction)
-    study.optimize(objective, n_trials=args.num_trials, show_progress_bar=True)
+    # Pruners
+    if(args.pruner == 'SuccessiveHalving'):
+        pruner = optuna.pruners.SuccessiveHalvingPruner()
+    elif(args.pruner == 'MedianPruner'):
+        pruner = optuna.pruners.MedianPruner()
+    elif(args.pruner == 'Hyperband'):
+        pruner = optuna.pruners.HyperbandPruner()
+    else:
+        raise NotImplementedError
+
+    study = optuna.create_study(direction=direction, pruner=pruner)
+    study.optimize(objective, n_trials=args.num_trials, show_progress_bar=False)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+
+    print("Pruned trials: ", pruned_trials)
 
     print("Study statistics: ")
     print("  Number of finished trials: ", len(study.trials))

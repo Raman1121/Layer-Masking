@@ -359,7 +359,7 @@ def get_args_parser(add_help=True):
 
     # HPARAM OPT Arguements
     parser.add_argument("--objective_metric", type=str, default="min_acc", choices=["min_acc", "acc_diff", "max_loss"])
-
     parser.add_argument("--num_trials", type=int, default=5)
+    parser.add_argument("--pruner", type=str, default='SuccessiveHalving', choices=['SuccessiveHalving', 'MedianPruner', 'Hyperband'])
 
     return parser
