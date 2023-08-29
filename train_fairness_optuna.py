@@ -10,6 +10,7 @@ import warnings
 import timm
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 import presets
 import torch
 import torch.utils.data
@@ -43,7 +44,7 @@ def create_opt_mask(trial, args, num_blocks):
     mask = np.zeros(mask_length, dtype=np.int8)
 
     for i in range(mask_length):
-        mask[i] = trial.suggest_int("mask_el_{}".format(i), 0, 1)
+        mask[i] = trial.suggest_int("Mask Idx {}".format(i), 0, 1)
 
     return mask
 
@@ -175,16 +176,6 @@ def objective(trial):
     device = torch.device(args.device)
 
     args.output_dir = os.path.join(os.getcwd(), args.model, args.dataset)
-    args.results_df = "Fairness_Optuna_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + ".csv"
-
-    try:
-        test_results_df = pd.read_csv(
-            os.path.join(args.output_dir, args.results_df)
-        )
-        print("Reading existing results dataframe")
-    except:
-        print("Creating new results dataframe")
-        test_results_df = create_results_df(args)
 
     args.distributed = False
     if args.use_deterministic_algorithms:
@@ -364,7 +355,7 @@ def objective(trial):
     print("Training time {}".format(total_time_str))
 
     # Obtaining the performance on val set
-    print("Evaluating on the val set")
+    print("Training finished | Evaluating on the val set")
 
     if args.sens_attribute == "gender":
         (
@@ -484,6 +475,10 @@ def objective(trial):
 if __name__ == "__main__":
     
     args = get_args_parser().parse_args()
+    args.plots_save_dir = os.path.join(os.getcwd(), "plots", "optuna_plots", args.model, args.dataset, args.tuning_method, args.sens_attribute)
+
+    if not os.path.exists(args.plots_save_dir):
+        os.makedirs(args.plots_save_dir)
 
     if(args.objective_metric == 'acc_diff' or args.objective_metric == 'max_loss'):
         direction = 'minimize'
@@ -493,7 +488,7 @@ if __name__ == "__main__":
         raise NotImplementedError
 
     study = optuna.create_study(direction=direction)
-    study.optimize(objective, n_trials=3, show_progress_bar=True)
+    study.optimize(objective, n_trials=args.num_trials, show_progress_bar=True)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
@@ -509,13 +504,66 @@ if __name__ == "__main__":
     print("  Value: ", trial.value)
 
     print("  Params: ")
+    best_mask = []
     for key, value in trial.params.items():
         print("    {}: {}".format(key, value))
+        best_mask.append(value)
 
-    # Plotting
-    optuna.visualization.matplotlib.plot_param_importances(study)
+    # Save the best mask
+    best_mask = np.array(best_mask).astype(np.int8)
+    mask_savedir = os.path.join(args.model, args.dataset, "Optuna Masks", args.sens_attribute)
+    if not os.path.exists(mask_savedir):
+        os.makedirs(mask_savedir)
+    np.save(os.path.join(mask_savedir, args.tuning_method + "_best_mask_" + str(trial.value) + ".npy"), best_mask)
 
-    optuna.visualization.matplotlib.plot_slice(study)
-    optuna.visualization.matplotlib.plot_optimization_history(study)
+    # Save these results to a dataframe
+    # results_df_savedir = os.path.join(args.model, args.dataset, "Optuna Results")
+    # if not os.path.exists(results_df_savedir):
+    #     os.makedirs(results_df_savedir)
+    # results_df = "Fairness_Optuna_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + ".csv"
+
+    # try:
+    #     test_results_df = pd.read_csv(
+    #         os.path.join(results_df_savedir, args.results_df)
+    #     )
+    #     print("Reading existing results dataframe")
+    # except:
+    #     print("Creating new results dataframe")
+    #     test_results_df = create_results_df(args)
+
+
+    #################### Plotting ####################
+
+    # 1. Parameter importance plots
+
+    # a) Bar Plot
+    param_imp_plot = optuna.visualization.matplotlib.plot_param_importances(study)
+    param_imp_plot.figure.tight_layout()
+    param_imp_plot.figure.savefig(os.path.join(args.plots_save_dir, "param_importance.jpg"), format="jpg")
+
+    # b) Contour Plot
+    # contour_plot = optuna.visualization.matplotlib.plot_contour(study)
+    # print(contour_plot)
+    #contour_plot.figure.savefig(os.path.join(args.plots_save_dir, "contour_plot.jpg"), format="jpg")
+
+    
+    # 2. Slice plot
+    #fig2 = plt.figure()
+    # slice_plot = optuna.visualization.matplotlib.plot_slice(study)
+    # print(slice_plot)
+    # slice_plot.figure.savefig(os.path.join(args.plots_save_dir, "slice_plot.jpg"), format="jpg")
+    # fig2.add_axes(axes)
+    # plt.savefig(os.path.join(args.plots_save_dir, "slice_plot.jpg"), format="jpg")
+    # plt.close(fig2)
+    
+    # 3. Optimization history plot
+    # fig3 = plt.figure()
+    history_plot = optuna.visualization.matplotlib.plot_optimization_history(study)
+    history_plot.figure.tight_layout()
+    history_plot.figure.savefig(os.path.join(args.plots_save_dir, "optimization_history.jpg"), format="jpg")
+    # fig3.add_axes(axes)
+    # plt.savefig(os.path.join(args.plots_save_dir, "optimization_history.jpg"), format="jpg")
+    # plt.close(fig3)
+    
     
 
