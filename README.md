@@ -11,3 +11,11 @@ Running Command for GD Mask Learning:
 ```
 python train_mask_GD.py --model vit_base --epochs 50 --batch-size 128 --opt adamw --lr 1e-4 --outer_lr 1e-3 --lr_scaler 100 --lr-scheduler cosineannealinglr --lr-warmup-method linear --lr-warmup-epochs 15 --lr-warmup-decay 0.033 --tuning_method tune_attention_blocks_random --dataset breastUS --wandb_logging
 ```
+
+Visaulizing Optuna Runs on a Web Browser
+
+
+'''
+optuna-dashboard sqlite:///example-study.db
+ssh -L 8888:localhost:8080 co-dutt1@login-gpu.hpc.cam.ac.uk
+'''
