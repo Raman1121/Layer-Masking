@@ -6,3 +6,4 @@ wandb/
 Experiment_Vectors/*
 Experiment_Vectors_Parameter/*
 Optuna_StorageDB/*
+*.db

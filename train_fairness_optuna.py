@@ -176,6 +176,11 @@ def objective(trial):
     args = get_args_parser().parse_args()
     device = torch.device(args.device)
 
+    try:
+        _temp_trainable_params_df = pd.read_csv('_temp_trainable_params_df.csv')
+    except:
+        _temp_trainable_params_df = pd.DataFrame(columns=['Trainable Params'])
+
     args.output_dir = os.path.join(os.getcwd(), args.model, args.dataset)
 
     args.distributed = False
@@ -199,6 +204,10 @@ def objective(trial):
 
     trainable_params, all_param = utils.check_tunable_params(model, True)
     trainable_percentage = 100 * trainable_params / all_param
+
+    _row = [trainable_percentage]
+    _temp_trainable_params_df.loc[len(_temp_trainable_params_df)] = _row
+    _temp_trainable_params_df.to_csv('_temp_trainable_params_df.csv', index=False)
 
     model.to(device)
 
@@ -468,7 +477,7 @@ def objective(trial):
         trial.report(val_acc, epoch)
 
     if(trial.should_prune()):
-        raise optuna.exceptions.TrialPruned()
+        raise optuna.exceptions.TrialPruned()    
     
     if(args.objective_metric == 'acc_diff'):
         try:
@@ -571,6 +580,9 @@ if __name__ == "__main__":
     df = df.drop(['datetime_start', 'datetime_complete', 'duration', 'system_attrs_completed_rung_0'], axis=1)     # Drop unnecessary columns
     df = df.rename(columns={'value': args.objective_metric})
 
+    _temp_trainable_params_df = pd.read_csv('_temp_trainable_params_df.csv')
+    df['Trainable Params'] = _temp_trainable_params_df['Trainable Params']
+    os.remove('_temp_trainable_params_df.csv')
     print("!!! Saving the results dataframe at {}".format(os.path.join(results_df_savedir, results_df_name)))
     df.to_csv(os.path.join(results_df_savedir, results_df_name), index=False)
 
