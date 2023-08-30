@@ -509,13 +509,21 @@ if __name__ == "__main__":
     else:
         raise NotImplementedError
 
-    study = optuna.create_study(direction=direction, pruner=pruner)
-    study.optimize(objective, n_trials=args.num_trials, show_progress_bar=False)
+    # Study DB
+    study_name = args.dataset + "_" + args.tuning_method + "_" + args.sens_attribute + "_" + args.objective_metric
+    storage_dir = os.path.join(os.getcwd(), "Optuna_StorageDB")
+    if not os.path.exists(storage_dir):
+        os.makedirs(storage_dir)
+    storage_name = os.path.join(storage_dir, "sqlite:///{}.db".format(study_name))
+    print("!!! Creating the study DB at {}".format{storage_name})
+
+    study = optuna.create_study(direction=direction, pruner=pruner, storage=storage_name)
+    study.optimize(objective, n_trials=args.num_trials, show_progress_bar=True)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
 
-    print("Pruned trials: ", pruned_trials)
+    #print("Pruned trials: ", pruned_trials)
 
     print("Study statistics: ")
     print("  Number of finished trials: ", len(study.trials))
@@ -538,23 +546,23 @@ if __name__ == "__main__":
     mask_savedir = os.path.join(args.model, args.dataset, "Optuna Masks", args.sens_attribute)
     if not os.path.exists(mask_savedir):
         os.makedirs(mask_savedir)
+
+    print("!!! Saving the best mask at {}".format{os.path.join(mask_savedir, args.tuning_method + "_best_mask_" + str(trial.value) + ".npy")})
     np.save(os.path.join(mask_savedir, args.tuning_method + "_best_mask_" + str(trial.value) + ".npy"), best_mask)
+    
 
     # Save these results to a dataframe
-    # results_df_savedir = os.path.join(args.model, args.dataset, "Optuna Results")
-    # if not os.path.exists(results_df_savedir):
-    #     os.makedirs(results_df_savedir)
-    # results_df = "Fairness_Optuna_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + ".csv"
+    results_df_savedir = os.path.join(args.model, args.dataset, "Optuna Results")
+    if not os.path.exists(results_df_savedir):
+        os.makedirs(results_df_savedir)
+    results_df_name = "Fairness_Optuna_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + ".csv"
 
-    # try:
-    #     test_results_df = pd.read_csv(
-    #         os.path.join(results_df_savedir, args.results_df)
-    #     )
-    #     print("Reading existing results dataframe")
-    # except:
-    #     print("Creating new results dataframe")
-    #     test_results_df = create_results_df(args)
+    df = study.trials_dataframe()
+    df = df.drop(['datetime_start', 'datetime_complete', 'duration', 'system_attrs_completed_rung_0'], axis=1)     # Drop unnecessary columns
+    df = df.rename(columns={'value': args.objective_metric})
 
+    print("!!! Saving the results dataframe at {}".format{os.path.join(results_df_savedir, results_df_name)})
+    df.to_csv(os.path.join(results_df_savedir, results_df_name), index=False)
 
     #################### Plotting ####################
 
@@ -566,7 +574,10 @@ if __name__ == "__main__":
     param_imp_plot.figure.savefig(os.path.join(args.plots_save_dir, "param_importance.jpg"), format="jpg")
 
     # b) Contour Plot
-    # contour_plot = optuna.visualization.matplotlib.plot_contour(study)
+    contour_fig = plt.figure()
+    contour_plot = optuna.visualization.matplotlib.plot_contour(study)
+    #contour_fig.savefig(os.path.join(args.plots_save_dir, "contour_plot.jpg"), format="jpg")
+    
     # print(contour_plot)
     #contour_plot.figure.savefig(os.path.join(args.plots_save_dir, "contour_plot.jpg"), format="jpg")
 

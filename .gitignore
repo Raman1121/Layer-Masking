@@ -3,3 +3,6 @@ vit_*/
 __pycache__/
 wandb/
 *.out
+Experiment_Vectors/*
+Experiment_Vectors_Parameter/*
+Optuna_StorageDB/*
