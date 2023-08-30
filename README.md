@@ -15,7 +15,7 @@ python train_mask_GD.py --model vit_base --epochs 50 --batch-size 128 --opt adam
 Visaulizing Optuna Runs on a Web Browser
 
 
-'''
+```
 optuna-dashboard sqlite:///example-study.db
 ssh -L 8888:localhost:8080 co-dutt1@login-gpu.hpc.cam.ac.uk
-'''
+```
