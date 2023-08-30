@@ -440,11 +440,11 @@ def objective(trial):
         acc_diff = abs(max_acc - min_acc)
 
         print("\n")
-        print("val Age Group 0 Accuracy: ", val_acc_type0)
-        print("val Age Group 1 Accuracy: ", val_acc_type1)
-        print("val Age Group 2 Accuracy: ", val_acc_type2)
-        print("val Age Group 3 Accuracy: ", val_acc_type3)
-        print("val Age Group 4 Accuracy: ", val_acc_type4)
+        print("val Age Group 0 Accuracy: ", acc_age0_avg)
+        print("val Age Group 1 Accuracy: ", acc_age1_avg)
+        print("val Age Group 2 Accuracy: ", acc_age2_avg)
+        print("val Age Group 3 Accuracy: ", acc_age3_avg)
+        print("val Age Group 4 Accuracy: ", acc_age4_avg)
         print("Difference in sub-group performance: ", acc_diff)
         
     else:
@@ -464,6 +464,8 @@ def objective(trial):
         trial.report(acc_diff, epoch)
     elif(args.objective_metric == 'max_loss'):
         trial.report(val_max_loss, epoch)
+    elif(args.objective_metric == 'overall_acc'):
+        trial.report(val_acc, epoch)
 
     if(trial.should_prune()):
         raise optuna.exceptions.TrialPruned()
@@ -483,6 +485,13 @@ def objective(trial):
             return val_max_loss.item()
         except:
             return val_max_loss
+    elif(args.objective_metric == 'overall_acc'):
+        try:
+            return val_acc.item()
+        except:
+            return val_acc
+    else:
+        raise NotImplementedError("Objective metric not implemented")
 
 if __name__ == "__main__":
     
@@ -494,7 +503,7 @@ if __name__ == "__main__":
 
     if(args.objective_metric == 'acc_diff' or args.objective_metric == 'max_loss'):
         direction = 'minimize'
-    elif(args.objective_metric == 'min_acc'):
+    elif(args.objective_metric == 'min_acc' or args.objective_metric == 'overall_acc'):
         direction = 'maximize'
     else:
         raise NotImplementedError
@@ -514,8 +523,9 @@ if __name__ == "__main__":
     storage_dir = os.path.join(os.getcwd(), "Optuna_StorageDB")
     if not os.path.exists(storage_dir):
         os.makedirs(storage_dir)
-    storage_name = os.path.join(storage_dir, "sqlite:///{}.db".format(study_name))
-    print("!!! Creating the study DB at {}".format{storage_name})
+    #storage_name = os.path.join(storage_dir, "sqlite:///{}.db".format(study_name))
+    storage_name = "sqlite:///{}.db".format(study_name)
+    print("!!! Creating the study DB at {}".format(storage_name))
 
     study = optuna.create_study(direction=direction, pruner=pruner, storage=storage_name)
     study.optimize(objective, n_trials=args.num_trials, show_progress_bar=True)
@@ -547,7 +557,7 @@ if __name__ == "__main__":
     if not os.path.exists(mask_savedir):
         os.makedirs(mask_savedir)
 
-    print("!!! Saving the best mask at {}".format{os.path.join(mask_savedir, args.tuning_method + "_best_mask_" + str(trial.value) + ".npy")})
+    print("!!! Saving the best mask at {}".format(os.path.join(mask_savedir, args.tuning_method + "_best_mask_" + str(trial.value) + ".npy")))
     np.save(os.path.join(mask_savedir, args.tuning_method + "_best_mask_" + str(trial.value) + ".npy"), best_mask)
     
 
@@ -561,7 +571,7 @@ if __name__ == "__main__":
     df = df.drop(['datetime_start', 'datetime_complete', 'duration', 'system_attrs_completed_rung_0'], axis=1)     # Drop unnecessary columns
     df = df.rename(columns={'value': args.objective_metric})
 
-    print("!!! Saving the results dataframe at {}".format{os.path.join(results_df_savedir, results_df_name)})
+    print("!!! Saving the results dataframe at {}".format(os.path.join(results_df_savedir, results_df_name)))
     df.to_csv(os.path.join(results_df_savedir, results_df_name), index=False)
 
     #################### Plotting ####################
@@ -569,36 +579,38 @@ if __name__ == "__main__":
     # 1. Parameter importance plots
 
     # a) Bar Plot
-    param_imp_plot = optuna.visualization.matplotlib.plot_param_importances(study)
-    param_imp_plot.figure.tight_layout()
-    param_imp_plot.figure.savefig(os.path.join(args.plots_save_dir, "param_importance.jpg"), format="jpg")
 
-    # b) Contour Plot
-    contour_fig = plt.figure()
-    contour_plot = optuna.visualization.matplotlib.plot_contour(study)
-    #contour_fig.savefig(os.path.join(args.plots_save_dir, "contour_plot.jpg"), format="jpg")
-    
-    # print(contour_plot)
-    #contour_plot.figure.savefig(os.path.join(args.plots_save_dir, "contour_plot.jpg"), format="jpg")
+    if(not args.disable_plotting):
+        param_imp_plot = optuna.visualization.matplotlib.plot_param_importances(study)
+        param_imp_plot.figure.tight_layout()
+        param_imp_plot.figure.savefig(os.path.join(args.plots_save_dir, "param_importance.jpg"), format="jpg")
 
-    
-    # 2. Slice plot
-    #fig2 = plt.figure()
-    # slice_plot = optuna.visualization.matplotlib.plot_slice(study)
-    # print(slice_plot)
-    # slice_plot.figure.savefig(os.path.join(args.plots_save_dir, "slice_plot.jpg"), format="jpg")
-    # fig2.add_axes(axes)
-    # plt.savefig(os.path.join(args.plots_save_dir, "slice_plot.jpg"), format="jpg")
-    # plt.close(fig2)
-    
-    # 3. Optimization history plot
-    # fig3 = plt.figure()
-    history_plot = optuna.visualization.matplotlib.plot_optimization_history(study)
-    history_plot.figure.tight_layout()
-    history_plot.figure.savefig(os.path.join(args.plots_save_dir, "optimization_history.jpg"), format="jpg")
-    # fig3.add_axes(axes)
-    # plt.savefig(os.path.join(args.plots_save_dir, "optimization_history.jpg"), format="jpg")
-    # plt.close(fig3)
+        # b) Contour Plot
+        contour_fig = plt.figure()
+        contour_plot = optuna.visualization.matplotlib.plot_contour(study)
+        #contour_fig.savefig(os.path.join(args.plots_save_dir, "contour_plot.jpg"), format="jpg")
+        
+        # print(contour_plot)
+        #contour_plot.figure.savefig(os.path.join(args.plots_save_dir, "contour_plot.jpg"), format="jpg")
+
+        
+        # 2. Slice plot
+        #fig2 = plt.figure()
+        # slice_plot = optuna.visualization.matplotlib.plot_slice(study)
+        # print(slice_plot)
+        # slice_plot.figure.savefig(os.path.join(args.plots_save_dir, "slice_plot.jpg"), format="jpg")
+        # fig2.add_axes(axes)
+        # plt.savefig(os.path.join(args.plots_save_dir, "slice_plot.jpg"), format="jpg")
+        # plt.close(fig2)
+        
+        # 3. Optimization history plot
+        # fig3 = plt.figure()
+        history_plot = optuna.visualization.matplotlib.plot_optimization_history(study)
+        history_plot.figure.tight_layout()
+        history_plot.figure.savefig(os.path.join(args.plots_save_dir, "optimization_history.jpg"), format="jpg")
+        # fig3.add_axes(axes)
+        # plt.savefig(os.path.join(args.plots_save_dir, "optimization_history.jpg"), format="jpg")
+        # plt.close(fig3)
     
     
 
