@@ -185,15 +185,25 @@ def train_one_epoch_fairness(
             acc_type5 = res_type5[0]
 
         elif args.sens_attribute == "age":
-            acc1, res_type0, res_type1, res_type2, res_type3, res_type4 = utils.accuracy_by_age(
-                output, target, sens_attr, topk=(1,)
-            )
-            acc1 = acc1[0]
-            acc_type0 = res_type0[0]
-            acc_type1 = res_type1[0]
-            acc_type2 = res_type2[0]
-            acc_type3 = res_type3[0]
-            acc_type4 = res_type4[0]
+            if(args.age_type == 'multi'):
+                acc1, res_type0, res_type1, res_type2, res_type3, res_type4 = utils.accuracy_by_age(
+                    output, target, sens_attr, topk=(1,)
+                )
+                acc1 = acc1[0]
+                acc_type0 = res_type0[0]
+                acc_type1 = res_type1[0]
+                acc_type2 = res_type2[0]
+                acc_type3 = res_type3[0]
+                acc_type4 = res_type4[0]
+            elif(args.age_type == 'binary'):
+                acc1, res_type0, res_type1 = utils.accuracy_by_age_binary(
+                    output, target, sens_attr, topk=(1,)
+                )
+                acc1 = acc1[0]
+                acc_type0 = res_type0[0]
+                acc_type1 = res_type1[0]
+            else:
+                raise NotImplementedError("Age type not implemented")
         else:
             raise NotImplementedError
 
@@ -243,30 +253,43 @@ def train_one_epoch_fairness(
                 metric_logger.meters["acc_type5"].update(0.0, n=batch_size)
 
         elif args.sens_attribute == "age":
-            if acc_type0 is not np.nan:
-                metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
-            else:
-                metric_logger.meters["acc_Age0"].update(0.0, n=batch_size)
+            if(args.age_type == 'multi'):
+                if acc_type0 is not np.nan:
+                    metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_Age0"].update(0.0, n=batch_size)
 
-            if acc_type1 is not np.nan: 
-                metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
-            else:
-                metric_logger.meters["acc_Age1"].update(0.0, n=batch_size)
-            
-            if acc_type2 is not np.nan:
-                metric_logger.meters["acc_Age2"].update(acc_type2.item(), n=batch_size)
-            else:
-                metric_logger.meters["acc_Age2"].update(0.0, n=batch_size)
-            
-            if acc_type3 is not np.nan:
-                metric_logger.meters["acc_Age3"].update(acc_type3.item(), n=batch_size)
-            else:
-                metric_logger.meters["acc_Age3"].update(0.0, n=batch_size)
+                if acc_type1 is not np.nan: 
+                    metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_Age1"].update(0.0, n=batch_size)
+                
+                if acc_type2 is not np.nan:
+                    metric_logger.meters["acc_Age2"].update(acc_type2.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_Age2"].update(0.0, n=batch_size)
+                
+                if acc_type3 is not np.nan:
+                    metric_logger.meters["acc_Age3"].update(acc_type3.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_Age3"].update(0.0, n=batch_size)
 
-            if acc_type4 is not np.nan:
-                metric_logger.meters["acc_Age4"].update(acc_type4.item(), n=batch_size)
+                if acc_type4 is not np.nan:
+                    metric_logger.meters["acc_Age4"].update(acc_type4.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_Age4"].update(0.0, n=batch_size)
+            elif(args.age_type == 'binary'):
+                if acc_type0 is not np.nan:
+                    metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_Age0"].update(0.0, n=batch_size)
+
+                if acc_type1 is not np.nan: 
+                    metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_Age1"].update(0.0, n=batch_size)
             else:
-                metric_logger.meters["acc_Age4"].update(0.0, n=batch_size)
+                raise NotImplementedError("Age type not implemented")
 
         # metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
         # metric_logger.meters["auc"].update(auc, n=batch_size)

@@ -458,6 +458,7 @@ def main(args):
                     )
                 )
             elif args.sens_attribute == "age":
+                if(args.age_type == 'multi'):
                 (
                     val_acc,
                     acc_age0_avg,
@@ -487,6 +488,32 @@ def main(args):
                         val_max_loss,
                     )
                 )
+            elif(args.age_type == 'binary'):
+                (
+                    val_acc,
+                    acc_age0_avg,
+                    acc_age1_avg,
+                    val_loss,
+                    val_max_loss,
+                ) = evaluate_fairness_age_binary(
+                    model,
+                    criterion,
+                    ece_criterion,
+                    data_loader_val,
+                    args=args,
+                    device=device,
+                )
+                print(
+                    "Val Acc: {:.2f}, Val Age Group0 Acc: {:.2f}, Val Age Group1 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
+                        val_acc,
+                        acc_age0_avg,
+                        acc_age1_avg,
+                        torch.mean(val_loss),
+                        val_max_loss,
+                    )
+                )
+            else:
+                raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
             else:
                 raise NotImplementedError
 
@@ -648,30 +675,50 @@ def main(args):
             print("Test Type 5 Accuracy: ", test_acc_type5)
 
         elif(args.sens_attribute == 'age'):
-            (
-                test_acc,
-                test_acc_type0,
-                test_acc_type1,
-                test_acc_type2,
-                test_acc_type3,
-                test_acc_type4,
-                test_loss,
-                test_max_loss,
-            ) = evaluate_fairness_age(
-                model,
-                criterion,
-                ece_criterion,
-                data_loader_test,
-                args=args,
-                device=device,
-            )
-            print("\n")
-            print("Test Age Group 0 Accuracy: ", test_acc_type0)
-            print("Test Age Group 1 Accuracy: ", test_acc_type1)
-            print("Test Age Group 2 Accuracy: ", test_acc_type2)
-            print("Test Age Group 3 Accuracy: ", test_acc_type3)
-            print("Test Age Group 4 Accuracy: ", test_acc_type4)
-            
+            if(args.age_type == 'multi'):
+                (
+                    test_acc,
+                    test_acc_type0,
+                    test_acc_type1,
+                    test_acc_type2,
+                    test_acc_type3,
+                    test_acc_type4,
+                    test_loss,
+                    test_max_loss,
+                ) = evaluate_fairness_age(
+                    model,
+                    criterion,
+                    ece_criterion,
+                    data_loader_test,
+                    args=args,
+                    device=device,
+                )
+                print("\n")
+                print("Test Age Group 0 Accuracy: ", test_acc_type0)
+                print("Test Age Group 1 Accuracy: ", test_acc_type1)
+                print("Test Age Group 2 Accuracy: ", test_acc_type2)
+                print("Test Age Group 3 Accuracy: ", test_acc_type3)
+                print("Test Age Group 4 Accuracy: ", test_acc_type4)
+            elif(args.age_type == 'binary'):
+                (
+                    test_acc,
+                    test_acc_type0,
+                    test_acc_type1,
+                    test_loss,
+                    test_max_loss,
+                ) = evaluate_fairness_age_binary(
+                    model,
+                    criterion,
+                    ece_criterion,
+                    data_loader_test,
+                    args=args,
+                    device=device,
+                )
+                print("\n")
+                print("Test Age Group 0 Accuracy: ", test_acc_type0)
+                print("Test Age Group 1 Accuracy: ", test_acc_type1)
+            else:
+                raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
         else:
             raise NotImplementedError
 
@@ -702,9 +749,15 @@ def main(args):
                     best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
                     worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
                 elif(args.sens_attribute == 'age'):
-                    best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4)
-                    worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4)
-
+                    if(args.age_type == 'multi'):
+                        best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4)
+                        worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4)
+                    elif(args.age_type == 'binary'):
+                        best_acc = max(test_acc_type0, test_acc_type1)
+                        worst_acc = min(test_acc_type0, test_acc_type1)
+                    else:
+                        raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
+                        
                 new_row2 = [
                     args.tuning_method,
                     round(trainable_percentage, 3),

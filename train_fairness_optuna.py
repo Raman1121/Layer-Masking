@@ -524,6 +524,8 @@ def objective(trial):
             print("val Age Group 0 Accuracy: ", acc_age0_avg)
             print("val Age Group 1 Accuracy: ", acc_age1_avg)
             print("Difference in sub-group performance: ", acc_diff)
+        else:
+            raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
         
     else:
         raise NotImplementedError
@@ -656,20 +658,15 @@ if __name__ == "__main__":
     
 
     # Save these results to a dataframe
-    # results_df_savedir = os.path.join(args.model, args.dataset, "Optuna Results")
-    # if not os.path.exists(results_df_savedir):
-    #     os.makedirs(results_df_savedir)
-    # results_df_name = "Fairness_Optuna_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + "_" + args.objective_metric + ".csv"
+    stats_df_savedir = os.path.join(args.model, args.dataset, "Optuna Run Stats")
+    if not os.path.exists(stats_df_savedir):
+        os.makedirs(stats_df_savedir)
+    stats_df_name = "Run Stats" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + "_" + args.objective_metric + ".csv"
 
     df = study.trials_dataframe()
     df = df.drop(['datetime_start', 'datetime_complete', 'duration', 'system_attrs_completed_rung_0'], axis=1)     # Drop unnecessary columns
     df = df.rename(columns={'value': args.objective_metric})
-
-    # _temp_trainable_params_df = pd.read_csv('_temp_trainable_params_df.csv')
-    # df['Trainable Params'] = _temp_trainable_params_df['Trainable Params']
-    # os.remove('_temp_trainable_params_df.csv')
-    # print("!!! Saving the results dataframe at {}".format(os.path.join(results_df_savedir, results_df_name)))
-    # df.to_csv(os.path.join(results_df_savedir, results_df_name), index=False)
+    df.to_csv(os.path.join(stats_df_savedir, stats_df_name), index=False)
 
     #################### Plotting ####################
 
