@@ -39,7 +39,8 @@ class PapilaDataset(Dataset):
         if(self.sens_attribute == 'gender'):
             sens_attribute = self.df.iloc[idx]['Sex']
         elif(self.sens_attribute == 'age'):
-            sens_attribute = self.df.iloc[idx]['Age_multi']
+            #sens_attribute = self.df.iloc[idx]['Age_multi']
+            sens_attribute = self.df.iloc[idx]['Age_binary']
 
         if self.transform:
             image = self.transform(image)

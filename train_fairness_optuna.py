@@ -4,10 +4,12 @@ os.environ["TORCH_HOME"] = os.path.dirname(os.getcwd())
 
 import datetime
 import random
+import sys
 import re
 import time
 import warnings
 import timm
+import logging
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -39,6 +41,8 @@ def create_opt_mask(trial, args, num_blocks):
         mask_length = num_blocks
     elif(args.tuning_method == 'tune_attention_params_random'):
         mask_length = num_blocks * 4
+    elif(args.tuning_method == 'fullft'):
+        return None
     else:
         raise NotImplementedError
 
@@ -86,9 +90,8 @@ def create_results_df(args):
                 columns=[
                     "Tuning Method",
                     "Train Percent",
-                    "LR Scaler",
-                    "Inner LR",
-                    "Test Acc@1",
+                    "LR",
+                    "Test Acc Overall",
                     "Test Acc Male",
                     "Test Acc Female",
                     "Test Acc Difference",
@@ -99,9 +102,8 @@ def create_results_df(args):
                 columns=[
                     "Tuning Method",
                     "Train Percent",
-                    "LR Scaler",
-                    "Inner LR",
-                    "Test Acc@1",
+                    "LR",
+                    "Test Acc Overall",
                     "Test Acc (Best)",
                     "Test Acc (Worst)",
                     "Test Acc Difference",
@@ -176,10 +178,25 @@ def objective(trial):
     args = get_args_parser().parse_args()
     device = torch.device(args.device)
 
+    if(args.dev_mode):
+        args.disable_plotting = True
+        args.disable_checkpointing = True
+
+    # try:
+    #     _temp_trainable_params_df = pd.read_csv('_temp_trainable_params_df.csv')
+    # except:
+    #     _temp_trainable_params_df = pd.DataFrame(columns=['Trainable Params'])
+
+    # Saving results to a dataframe
+    results_df_savedir = os.path.join(args.model, args.dataset, "Optuna Results")
+    if not os.path.exists(results_df_savedir):
+        os.makedirs(results_df_savedir)
+    results_df_name = "Fairness_Optuna_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + "_" + args.objective_metric + ".csv"
+
     try:
-        _temp_trainable_params_df = pd.read_csv('_temp_trainable_params_df.csv')
+        results_df = pd.read_csv(os.path.join(results_df_savedir, results_df_name))
     except:
-        _temp_trainable_params_df = pd.DataFrame(columns=['Trainable Params'])
+        results_df = create_results_df(args)
 
     args.output_dir = os.path.join(os.getcwd(), args.model, args.dataset)
 
@@ -205,9 +222,9 @@ def objective(trial):
     trainable_params, all_param = utils.check_tunable_params(model, True)
     trainable_percentage = 100 * trainable_params / all_param
 
-    _row = [trainable_percentage]
-    _temp_trainable_params_df.loc[len(_temp_trainable_params_df)] = _row
-    _temp_trainable_params_df.to_csv('_temp_trainable_params_df.csv', index=False)
+    # _row = [round(trainable_percentage, 3)]
+    # _temp_trainable_params_df.loc[len(_temp_trainable_params_df)] = _row
+    # _temp_trainable_params_df.to_csv('_temp_trainable_params_df.csv', index=False)
 
     model.to(device)
 
@@ -306,35 +323,62 @@ def objective(trial):
             )
 
         elif args.sens_attribute == "age":
-            (
-                val_acc,
-                acc_age0_avg,
-                acc_age1_avg,
-                acc_age2_avg,
-                acc_age3_avg,
-                acc_age4_avg,
-                val_loss,
-                val_max_loss,
-            ) = evaluate_fairness_age(
-                model,
-                criterion,
-                ece_criterion,
-                data_loader_val,
-                args=args,
-                device=device,
-            )
-            print(
-                "Val Acc: {:.2f}, Val Age Group0 Acc: {:.2f}, Val Age Group1 Acc: {:.2f}, Val Age Group2 Acc: {:.2f}, Val Age Group3 Acc: {:.2f}, Val Age Group4 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
+            if(args.age_type == 'multi'):
+                (
                     val_acc,
                     acc_age0_avg,
                     acc_age1_avg,
                     acc_age2_avg,
                     acc_age3_avg,
                     acc_age4_avg,
-                    torch.mean(val_loss),
+                    val_loss,
                     val_max_loss,
+                ) = evaluate_fairness_age(
+                    model,
+                    criterion,
+                    ece_criterion,
+                    data_loader_val,
+                    args=args,
+                    device=device,
                 )
-            )
+                print(
+                    "Val Acc: {:.2f}, Val Age Group0 Acc: {:.2f}, Val Age Group1 Acc: {:.2f}, Val Age Group2 Acc: {:.2f}, Val Age Group3 Acc: {:.2f}, Val Age Group4 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
+                        val_acc,
+                        acc_age0_avg,
+                        acc_age1_avg,
+                        acc_age2_avg,
+                        acc_age3_avg,
+                        acc_age4_avg,
+                        torch.mean(val_loss),
+                        val_max_loss,
+                    )
+                )
+            elif(args.age_type == 'binary'):
+                (
+                    val_acc,
+                    acc_age0_avg,
+                    acc_age1_avg,
+                    val_loss,
+                    val_max_loss,
+                ) = evaluate_fairness_age_binary(
+                    model,
+                    criterion,
+                    ece_criterion,
+                    data_loader_val,
+                    args=args,
+                    device=device,
+                )
+                print(
+                    "Val Acc: {:.2f}, Val Age Group0 Acc: {:.2f}, Val Age Group1 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
+                        val_acc,
+                        acc_age0_avg,
+                        acc_age1_avg,
+                        torch.mean(val_loss),
+                        val_max_loss,
+                    )
+                )
+            else:
+                raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
         else:
             raise NotImplementedError
 
@@ -426,35 +470,60 @@ def objective(trial):
         print("Difference in sub-group performance: ", acc_diff)
 
     elif(args.sens_attribute == 'age'):
-        (
-            val_acc,
-            acc_age0_avg,
-            acc_age1_avg,
-            acc_age2_avg,
-            acc_age3_avg,
-            acc_age4_avg,
-            val_loss,
-            val_max_loss,
-        ) = evaluate_fairness_age(
-            model,
-            criterion,
-            ece_criterion,
-            data_loader_val,
-            args=args,
-            device=device,
-        )
+        if(args.age_type == 'multi'):
+            (
+                val_acc,
+                acc_age0_avg,
+                acc_age1_avg,
+                acc_age2_avg,
+                acc_age3_avg,
+                acc_age4_avg,
+                val_loss,
+                val_max_loss,
+            ) = evaluate_fairness_age(
+                model,
+                criterion,
+                ece_criterion,
+                data_loader_val,
+                args=args,
+                device=device,
+            )
 
-        max_acc = max(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
-        min_acc = min(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
-        acc_diff = abs(max_acc - min_acc)
+            max_acc = max(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
+            min_acc = min(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
+            acc_diff = abs(max_acc - min_acc)
 
-        print("\n")
-        print("val Age Group 0 Accuracy: ", acc_age0_avg)
-        print("val Age Group 1 Accuracy: ", acc_age1_avg)
-        print("val Age Group 2 Accuracy: ", acc_age2_avg)
-        print("val Age Group 3 Accuracy: ", acc_age3_avg)
-        print("val Age Group 4 Accuracy: ", acc_age4_avg)
-        print("Difference in sub-group performance: ", acc_diff)
+            print("\n")
+            print("val Age Group 0 Accuracy: ", acc_age0_avg)
+            print("val Age Group 1 Accuracy: ", acc_age1_avg)
+            print("val Age Group 2 Accuracy: ", acc_age2_avg)
+            print("val Age Group 3 Accuracy: ", acc_age3_avg)
+            print("val Age Group 4 Accuracy: ", acc_age4_avg)
+            print("Difference in sub-group performance: ", acc_diff)
+        
+        elif(args.age_type == 'binary'):
+            (
+                val_acc,
+                acc_age0_avg,
+                acc_age1_avg,
+                val_loss,
+                val_max_loss,
+            ) = evaluate_fairness_age_binary(
+                model,
+                criterion,
+                ece_criterion,
+                data_loader_val,
+                args=args,
+                device=device,
+            )
+
+            max_acc = max(acc_age0_avg, acc_age1_avg)
+            min_acc = min(acc_age0_avg, acc_age1_avg)
+            acc_diff = abs(max_acc - min_acc)
+            print("\n")
+            print("val Age Group 0 Accuracy: ", acc_age0_avg)
+            print("val Age Group 1 Accuracy: ", acc_age1_avg)
+            print("Difference in sub-group performance: ", acc_diff)
         
     else:
         raise NotImplementedError
@@ -465,6 +534,16 @@ def objective(trial):
     print("val Accuracy Difference: ", round(acc_diff, 3))
     print("val loss: ", round(torch.mean(val_loss).item(), 3))
     print("val max loss: ", round(val_max_loss.item(), 3))
+
+    # Adding results to the dataframe
+    if(args.sens_attribute == 'gender'):
+        _row = [args.tuning_method, trainable_percentage, args.lr, round(val_acc, 3), round(val_male_acc, 3), round(val_female_acc, 3), round(acc_diff, 3)]
+    elif(args.sens_attribute == 'age' or args.sens_attribute == 'skin_type'):
+        _row = [args.tuning_method, round(trainable_percentage, 3), args.lr, round(val_acc, 3), round(max_acc, 3), round(min_acc, 3), round(acc_diff, 3)]
+
+    results_df.loc[len(results_df)] = _row
+    print("!!! Saving the results dataframe at {}".format(os.path.join(results_df_savedir, results_df_name)))
+    results_df.to_csv(os.path.join(results_df_savedir, results_df_name), index=False)
 
     # Pruning
     if(args.objective_metric == 'min_acc'):
@@ -507,6 +586,10 @@ if __name__ == "__main__":
     args = get_args_parser().parse_args()
     args.plots_save_dir = os.path.join(os.getcwd(), "plots", "optuna_plots", args.model, args.dataset, args.tuning_method, args.sens_attribute)
 
+    if(args.dev_mode):
+        args.disable_plotting = True
+        args.disable_checkpointing = True
+
     if not os.path.exists(args.plots_save_dir):
         os.makedirs(args.plots_save_dir)
 
@@ -529,6 +612,7 @@ if __name__ == "__main__":
 
     # Study DB
     study_name = args.dataset + "_" + args.tuning_method + "_" + args.sens_attribute + "_" + args.objective_metric
+    optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
     storage_dir = os.path.join(os.getcwd(), "Optuna_StorageDB")
     if not os.path.exists(storage_dir):
         os.makedirs(storage_dir)
@@ -567,24 +651,25 @@ if __name__ == "__main__":
         os.makedirs(mask_savedir)
 
     print("!!! Saving the best mask at {}".format(os.path.join(mask_savedir, args.tuning_method + "_best_mask_" + str(trial.value) + ".npy")))
-    np.save(os.path.join(mask_savedir, args.tuning_method + "_best_mask_" + str(trial.value) + ".npy"), best_mask)
+    if(not args.dev_mode):
+        np.save(os.path.join(mask_savedir, args.tuning_method + "_best_mask_" + args.objective_metric + "_" + str(trial.value) + ".npy"), best_mask)
     
 
     # Save these results to a dataframe
-    results_df_savedir = os.path.join(args.model, args.dataset, "Optuna Results")
-    if not os.path.exists(results_df_savedir):
-        os.makedirs(results_df_savedir)
-    results_df_name = "Fairness_Optuna_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + ".csv"
+    # results_df_savedir = os.path.join(args.model, args.dataset, "Optuna Results")
+    # if not os.path.exists(results_df_savedir):
+    #     os.makedirs(results_df_savedir)
+    # results_df_name = "Fairness_Optuna_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + "_" + args.objective_metric + ".csv"
 
     df = study.trials_dataframe()
     df = df.drop(['datetime_start', 'datetime_complete', 'duration', 'system_attrs_completed_rung_0'], axis=1)     # Drop unnecessary columns
     df = df.rename(columns={'value': args.objective_metric})
 
-    _temp_trainable_params_df = pd.read_csv('_temp_trainable_params_df.csv')
-    df['Trainable Params'] = _temp_trainable_params_df['Trainable Params']
-    os.remove('_temp_trainable_params_df.csv')
-    print("!!! Saving the results dataframe at {}".format(os.path.join(results_df_savedir, results_df_name)))
-    df.to_csv(os.path.join(results_df_savedir, results_df_name), index=False)
+    # _temp_trainable_params_df = pd.read_csv('_temp_trainable_params_df.csv')
+    # df['Trainable Params'] = _temp_trainable_params_df['Trainable Params']
+    # os.remove('_temp_trainable_params_df.csv')
+    # print("!!! Saving the results dataframe at {}".format(os.path.join(results_df_savedir, results_df_name)))
+    # df.to_csv(os.path.join(results_df_savedir, results_df_name), index=False)
 
     #################### Plotting ####################
 
@@ -593,36 +678,71 @@ if __name__ == "__main__":
     # a) Bar Plot
 
     if(not args.disable_plotting):
-        param_imp_plot = optuna.visualization.matplotlib.plot_param_importances(study)
-        param_imp_plot.figure.tight_layout()
-        param_imp_plot.figure.savefig(os.path.join(args.plots_save_dir, "param_importance.jpg"), format="jpg")
+        try:
+            param_imp_plot = optuna.visualization.matplotlib.plot_param_importances(study)
+            param_imp_plot.figure.tight_layout()
+            param_imp_plot.figure.savefig(os.path.join(args.plots_save_dir, "param_importance_{}.jpg".format(args.objective_metric)), format="jpg")
+        except:
+            print("Error in plotting parameter importance plot")
 
         # b) Contour Plot
-        contour_fig = plt.figure()
-        contour_plot = optuna.visualization.matplotlib.plot_contour(study)
+        try:
+            contour_fig = plt.figure()
+            contour_plot = optuna.visualization.matplotlib.plot_contour(study)
+        except:
+            print("Error in plotting contour plot")
         #contour_fig.savefig(os.path.join(args.plots_save_dir, "contour_plot.jpg"), format="jpg")
         
         # print(contour_plot)
-        #contour_plot.figure.savefig(os.path.join(args.plots_save_dir, "contour_plot.jpg"), format="jpg")
+        #contour_plot.figure.savefig(os.path.join(args.plots_save_dir, "contour_plot_{}.jpg".format(args.objective_metric)), format="jpg")
 
         
         # 2. Slice plot
         #fig2 = plt.figure()
         # slice_plot = optuna.visualization.matplotlib.plot_slice(study)
         # print(slice_plot)
-        # slice_plot.figure.savefig(os.path.join(args.plots_save_dir, "slice_plot.jpg"), format="jpg")
+        # slice_plot.figure.savefig(os.path.join(args.plots_save_dir, "slice_plot_{}.jpg".format(args.objective_metric)), format="jpg")
         # fig2.add_axes(axes)
         # plt.savefig(os.path.join(args.plots_save_dir, "slice_plot.jpg"), format="jpg")
         # plt.close(fig2)
         
         # 3. Optimization history plot
-        # fig3 = plt.figure()
-        history_plot = optuna.visualization.matplotlib.plot_optimization_history(study)
-        history_plot.figure.tight_layout()
-        history_plot.figure.savefig(os.path.join(args.plots_save_dir, "optimization_history.jpg"), format="jpg")
-        # fig3.add_axes(axes)
-        # plt.savefig(os.path.join(args.plots_save_dir, "optimization_history.jpg"), format="jpg")
-        # plt.close(fig3)
+        try:
+            history_plot = optuna.visualization.matplotlib.plot_optimization_history(study)
+            history_plot.figure.tight_layout()
+            history_plot.figure.savefig(os.path.join(args.plots_save_dir, "optimization_history_{}.jpg".format(args.objective_metric)), format="jpg")
+        except:
+            print("Error in plotting optimization history plot")
+
+        # 4. High-dimensional parameter relationships plot
+        try:
+            parallel_plot = optuna.visualization.matplotlib.plot_parallel_coordinate(study)
+            parallel_plot.figure.tight_layout()
+            parallel_plot.figure.savefig(os.path.join(args.plots_save_dir, "parallel_coordinate_{}.jpg".format(args.objective_metric)), format="jpg")
+        except:
+            print("Error in plotting parallel coordinate plot")
+
+        # 5. Pareto front plot
+        try:
+            pareto_plot = optuna.visualization.matplotlib.plot_pareto_front(study)
+            pareto_plot.figure.tight_layout()
+            pareto_plot.figure.savefig(os.path.join(args.plots_save_dir, "pareto_plot_{}.jpg".format(args.objective_metric)), format="jpg")
+        except:
+            print("Error in plotting Pareto front plot")
+
+        # 6. Parameter Rank plot
+        try:
+            #param_rank_plot = optuna.visualization.matplotlib.plot_param_importances(study, target=lambda t: t.params[args.objective_metric])
+            param_rank_plot = optuna.visualization.matplotlib.plot_rank(study)
+            param_rank_plot.figure.tight_layout()
+            param_rank_plot.figure.savefig(os.path.join(args.plots_save_dir, "rank_plot_{}.jpg".format(args.objective_metric)), format="jpg")
+        except:
+            print("Error in plotting parameter rank plot")
+
+        
+
+
+
     
     
 

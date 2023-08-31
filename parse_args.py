@@ -352,15 +352,26 @@ def get_args_parser(add_help=True):
         action="store_true",
         help="To disable/ skip the training process.",
     )
+    parser.add_argument(
+        "--disable_plotting",
+        action="store_true",
+        help="To disable/ skip the plotting.",
+    )
+    parser.add_argument(
+        "--dev_mode",
+        action="store_true",
+        help="Dev mode disables plotting, checkpointing, etc",
+    )
 
     # FAIRNESS Arguements
     parser.add_argument('--sens_attribute',
                         type=str,
                         default=None,
                         help='Sensitive attribute to be used for fairness')
+    parser.add_argument('--age_type', type=str, default='multi', choices=['binary', 'multi'])
 
     # HPARAM OPT Arguements
-    parser.add_argument("--objective_metric", type=str, default="min_acc", choices=["min_acc", "acc_diff", "max_loss"])
+    parser.add_argument("--objective_metric", type=str, default="min_acc", choices=["min_acc", "acc_diff", "max_loss", "overall_acc"])
     parser.add_argument("--num_trials", type=int, default=5)
     parser.add_argument("--pruner", type=str, default='SuccessiveHalving', choices=['SuccessiveHalving', 'MedianPruner', 'Hyperband'])
 

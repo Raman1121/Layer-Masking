@@ -1142,6 +1142,144 @@ def evaluate_fairness_age(
         max_val_loss,
     )
 
+def evaluate_fairness_age_binary(
+    model,
+    criterion,
+    ece_criterion,
+    data_loader,
+    device,
+    args,
+    print_freq=100,
+    log_suffix="",
+    **kwargs,
+):
+    print("EVALUATING")
+    model.eval()
+
+    assert args.sens_attribute == "age"
+
+    total_loss_type1 = 0.0
+    total_loss_type2 = 0.0
+
+    num_type1 = 0
+    num_type2 = 0
+
+    metric_logger = utils.MetricLogger(delimiter="  ")
+    header = f"Test: {log_suffix}"
+
+    num_processed_samples = 0
+    with torch.inference_mode():
+        for image, target, sens_attr in metric_logger.log_every(
+            data_loader, print_freq, header
+        ):
+            image = image.to(device, non_blocking=True)
+            target = target.to(device, non_blocking=True)
+            # sens_attr = sens_attr.to(device, non_blocking=True)
+
+            output = model(image)
+            loss = criterion(output, target)
+            ece_loss = ece_criterion(output, target)
+
+            loss_type1 = torch.mean(loss[sens_attr == 0])
+            loss_type2 = torch.mean(loss[sens_attr == 1])
+            
+
+            total_loss_type1 += loss_type1.item()
+            total_loss_type2 += loss_type2.item()
+            
+
+            num_type1 += torch.sum(sens_attr == 0).item()
+            num_type2 += torch.sum(sens_attr == 1).item()
+            
+            total_losses = [
+                total_loss_type1,
+                total_loss_type2,
+                
+            ]
+            num_samples = [
+                num_type1,
+                num_type2,
+            ]
+
+            avg_losses = []
+            for total_loss, num in zip(total_losses, num_samples):
+                avg_loss = total_loss / num if num > 0 else 0.0
+                avg_losses.append(avg_loss)
+
+            avg_loss_type1 = avg_losses[0]
+            avg_loss_type2 = avg_losses[1]
+
+            # Take the maximum and minimum of all the losses
+            max_val_loss = torch.tensor(
+                max(
+                    avg_loss_type1,
+                    avg_loss_type2,
+                    
+            ))
+            min_val_loss = torch.tensor(
+                min(
+                    avg_loss_type1,
+                    avg_loss_type2,
+                    
+            ))
+
+            diff_loss = torch.abs(max_val_loss - min_val_loss)
+
+            
+            acc1, res_type0, res_type1 = utils.accuracy_by_age_binary(
+                output, target, sens_attr, topk=(1,)
+            )
+            
+            acc1 = acc1[0]
+
+            try:
+                acc_type0 = res_type0[0]
+            except:
+                acc_type0 = torch.tensor(0.0)
+            
+            try:
+                acc_type1 = res_type1[0]
+            except:
+                acc_type1 = torch.tensor(0.0)
+            
+            acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
+            auc = 0
+
+            batch_size = image.shape[0]
+            metric_logger.update(loss=torch.mean(loss).item())
+            metric_logger.update(ece_loss=ece_loss.item())
+            metric_logger.update(max_val_loss=max_val_loss)
+            metric_logger.update(diff_loss=diff_loss)
+            metric_logger.meters["acc1"].update(acc1_orig.item(), n=batch_size)
+            metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
+            metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
+            metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+            metric_logger.meters["auc"].update(auc, n=batch_size)
+            metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
+            metric_logger.meters["diff_loss"].update(diff_loss, n=batch_size)
+            num_processed_samples += batch_size
+
+    metric_logger.synchronize_between_processes()
+
+    print(
+        f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f} Max Loss {metric_logger.max_val_loss.global_avg:.3f} Diff Loss {metric_logger.diff_loss.global_avg:.3f}"
+    )
+    # return metric_logger.acc1.global_avg, loss, max_val_loss, metric_logger.acc1_male.global_avg, metric_logger.acc1_female.global_avg
+    # TODO: Use a different return statement here
+
+    acc_avg = metric_logger.acc1.global_avg
+    acc_age0_avg = metric_logger.acc_Age0.global_avg
+    acc_age1_avg = metric_logger.acc_Age1.global_avg
+    
+
+    return (
+        round(acc_avg, 3),
+        round(acc_age0_avg, 3),
+        round(acc_age1_avg, 3),
+        loss,
+        max_val_loss,
+    )
+
 
 def _get_cache_path(filepath):
     import hashlib
