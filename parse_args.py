@@ -374,5 +374,10 @@ def get_args_parser(add_help=True):
     parser.add_argument("--objective_metric", type=str, default="min_acc", choices=["min_acc", "acc_diff", "max_loss", "overall_acc"])
     parser.add_argument("--num_trials", type=int, default=5)
     parser.add_argument("--pruner", type=str, default='SuccessiveHalving', choices=['SuccessiveHalving', 'MedianPruner', 'Hyperband'])
+    parser.add_argument(
+        "--disable_storage",
+        action="store_true",
+        help="Disable creating a storage DB for the experiment",
+    )
 
     return parser

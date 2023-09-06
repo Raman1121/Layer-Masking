@@ -19,6 +19,13 @@ data:
     train_csv: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/PAPILA/MEDFAIR_SPLITS/new_train.csv'
     val_csv: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/PAPILA/MEDFAIR_SPLITS/new_val.csv'
     test_csv: '/home/co-dutt1/rds/hpc-work/ALL_DATASETS/PAPILA/MEDFAIR_SPLITS/new_test.csv'
+
+  ol3i:
+    root_path: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OL3I/ol3i'
+    img_path: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OL3I/ol3i/Image_Slices'
+    train_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OL3I/ol3i/CSV/new_train.csv'
+    val_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OL3I/ol3i/CSV/new_val.csv'
+    test_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OL3I/ol3i/CSV/new_test.csv'
     
   
 

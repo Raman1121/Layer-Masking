@@ -22,7 +22,7 @@ import torch.utils.data
 import torchvision
 import transforms
 import utils
-from data import HAM10000, fitzpatrick, papila
+from data import HAM10000, fitzpatrick, papila, ol3i
 from torch.utils.data.sampler import SubsetRandomSampler
 from sampler import RASampler
 from torch import nn
@@ -1538,6 +1538,8 @@ def load_fairness_data(args, df, df_val, df_test):
             dataset = fitzpatrick.FitzpatrickDataset(df, transform)
         elif args.dataset == "papila":
             dataset = papila.PapilaDataset(df, args.sens_attribute, transform)
+        elif args.dataset == "ol3i":
+            dataset = ol3i.OL3IDataset(df, args.sens_attribute, transform, args.age_type)
         else:
             raise NotImplementedError
 
@@ -1567,6 +1569,9 @@ def load_fairness_data(args, df, df_val, df_test):
         elif args.dataset == "papila":
             dataset_val = papila.PapilaDataset(df_val, args.sens_attribute, transform_eval)
             dataset_test = papila.PapilaDataset(df_test, args.sens_attribute, transform_eval)
+        elif args.dataset == "ol3i":
+            dataset_val = ol3i.OL3IDataset(df_val, args.sens_attribute, transform_eval, args.age_type)
+            dataset_test = ol3i.OL3IDataset(df_test, args.sens_attribute, transform_eval, args.age_type)
         else:
             raise NotImplementedError
 
@@ -1760,9 +1765,12 @@ def get_fairness_data(args, yaml_data):
     val_df = pd.read_csv(val_csv_path)
     test_df = pd.read_csv(test_csv_path)
 
-    train_df["Path"] = train_df["Path"].apply(lambda x: os.path.join(img_path, x))
-    val_df["Path"] = val_df["Path"].apply(lambda x: os.path.join(img_path, x))
-    test_df["Path"] = test_df["Path"].apply(lambda x: os.path.join(img_path, x))
+    if(args.dataset != "ol3i"):
+        train_df["Path"] = train_df["Path"].apply(lambda x: os.path.join(img_path, x))
+        val_df["Path"] = val_df["Path"].apply(lambda x: os.path.join(img_path, x))
+        test_df["Path"] = test_df["Path"].apply(lambda x: os.path.join(img_path, x))
+    else:
+        pass
 
     (
         dataset,
