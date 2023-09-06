@@ -44,6 +44,7 @@ def create_results_df(args):
                     "Test Acc Male",
                     "Test Acc Female",
                     "Test Acc Difference",
+                    "Mask Path"
                 ]
             )  
     elif(args.sens_attribute == 'skin_type' or args.sens_attribute == 'age'):
@@ -56,6 +57,7 @@ def create_results_df(args):
                     "Test Acc (Best)",
                     "Test Acc (Worst)",
                     "Test Acc Difference",
+                    "Mask Path"
                 ]
             )  
     else:
@@ -502,21 +504,26 @@ def main(args):
         # Add these results to CSV
         # Here we are adding results on the test set
 
+        if(args.mask_path is not None):
+            mask_path = args.mask_path.split('/')[-1]
+        else:
+            mask_path = 'None'
+
         if(args.sens_attribute == 'gender'):
-            new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, test_male_acc, test_female_acc, round(abs(test_male_acc - test_female_acc), 3)]
+            new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, test_male_acc, test_female_acc, round(abs(test_male_acc - test_female_acc), 3), mask_path]
         elif(args.sens_attribute == 'skin_type'):
             best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
             worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
-            new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, best_acc, worst_acc, round(abs(best_acc - worst_acc), 3)]
+            new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, best_acc, worst_acc, round(abs(best_acc - worst_acc), 3), mask_path]
         elif(args.sens_attribute == 'age'):
             if(args.age_type == 'multi'):
                 best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4)
                 worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4)
-                new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, best_acc, worst_acc, round(abs(best_acc - worst_acc), 3)]
+                new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, best_acc, worst_acc, round(abs(best_acc - worst_acc), 3), mask_path]
             elif(args.age_type == 'binary'):
                 best_acc = max(test_acc_type0, test_acc_type1)
                 worst_acc = min(test_acc_type0, test_acc_type1)
-                new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, best_acc, worst_acc, round(abs(best_acc - worst_acc), 3)]
+                new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, best_acc, worst_acc, round(abs(best_acc - worst_acc), 3), mask_path]
             else:
                 raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
         else:
@@ -539,7 +546,7 @@ if __name__ == "__main__":
     args = get_args_parser().parse_args()
     args.output_dir = os.path.join(os.getcwd(), args.model, args.dataset)
     
-    args.test_results_df = "TEST_SET_RESULTS_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + "_" + args.objective_metric + ".csv"
+    args.test_results_df = "NEW_TEST_SET_RESULTS_" + args.sens_attribute + "_" + args.objective_metric + ".csv"
 
     current_wd = os.getcwd()
     args.fig_savepath = os.path.join(args.output_dir, "plots/")

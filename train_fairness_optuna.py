@@ -593,7 +593,7 @@ if __name__ == "__main__":
         args.disable_checkpointing = True
 
     if not os.path.exists(args.plots_save_dir):
-        os.makedirs(args.plots_save_dir)
+        os.makedirs(args.plots_save_dir, exist_ok = True)
 
     if(args.objective_metric == 'acc_diff' or args.objective_metric == 'max_loss'):
         direction = 'minimize'
@@ -612,17 +612,20 @@ if __name__ == "__main__":
     else:
         raise NotImplementedError
 
-    # Study DB
-    study_name = args.dataset + "_" + args.tuning_method + "_" + args.sens_attribute + "_" + args.objective_metric
-    optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
-    storage_dir = os.path.join(os.getcwd(), "Optuna_StorageDB")
-    if not os.path.exists(storage_dir):
-        os.makedirs(storage_dir)
-    #storage_name = os.path.join(storage_dir, "sqlite:///{}.db".format(study_name))
-    storage_name = "sqlite:///{}.db".format(study_name)
-    print("!!! Creating the study DB at {}".format(storage_name))
 
-    study = optuna.create_study(direction=direction, pruner=pruner, storage=storage_name)
+    if(not args.disable_storage):
+        study_name = args.dataset + "_" + args.tuning_method + "_" + args.sens_attribute + "_" + args.objective_metric
+        optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
+        storage_dir = os.path.join(os.getcwd(), "Optuna_StorageDB")
+        if not os.path.exists(storage_dir):
+            os.makedirs(storage_dir)
+        #storage_name = os.path.join(storage_dir, "sqlite:///{}.db".format(study_name))
+        storage_name = "sqlite:///{}.db".format(study_name)
+        print("!!! Creating the study DB at {}".format(storage_name))
+        study = optuna.create_study(direction=direction, pruner=pruner, storage=storage_name)
+    else:
+        study = optuna.create_study(direction=direction, pruner=pruner)
+        
     study.optimize(objective, n_trials=args.num_trials, show_progress_bar=True)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
@@ -648,7 +651,7 @@ if __name__ == "__main__":
 
     # Save the best mask
     best_mask = np.array(best_mask).astype(np.int8)
-    mask_savedir = os.path.join(args.model, args.dataset, "Optuna Masks", args.sens_attribute)
+    mask_savedir = os.path.join(args.model, args.dataset, "Optuna_Masks", args.sens_attribute)
     if not os.path.exists(mask_savedir):
         os.makedirs(mask_savedir)
 
