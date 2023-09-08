@@ -22,7 +22,7 @@ import torch.utils.data
 import torchvision
 import transforms
 import utils
-from data import HAM10000, fitzpatrick, papila, ol3i
+from data import HAM10000, fitzpatrick, papila, ol3i, oasis
 from torch.utils.data.sampler import SubsetRandomSampler
 from sampler import RASampler
 from torch import nn
@@ -1540,8 +1540,10 @@ def load_fairness_data(args, df, df_val, df_test):
             dataset = papila.PapilaDataset(df, args.sens_attribute, transform)
         elif args.dataset == "ol3i":
             dataset = ol3i.OL3IDataset(df, args.sens_attribute, transform, args.age_type)
+        elif args.dataset == "oasis":
+            dataset = oasis.OASISDataset(df, args.sens_attribute, transform, args.age_type)
         else:
-            raise NotImplementedError
+            raise NotImplementedError("{} dataset not implemented for training".format(args.dataset))
 
     print("Took", time.time() - st)
     print("Loading validation and test data")
@@ -1572,8 +1574,11 @@ def load_fairness_data(args, df, df_val, df_test):
         elif args.dataset == "ol3i":
             dataset_val = ol3i.OL3IDataset(df_val, args.sens_attribute, transform_eval, args.age_type)
             dataset_test = ol3i.OL3IDataset(df_test, args.sens_attribute, transform_eval, args.age_type)
+        elif args.dataset == "oasis":
+            dataset_val = oasis.OASISDataset(df_val, args.sens_attribute, transform_eval, args.age_type)
+            dataset_test = oasis.OASISDataset(df_test, args.sens_attribute, transform_eval, args.age_type)
         else:
-            raise NotImplementedError
+            raise NotImplementedError("{} dataset not implemented for either validation or test".format(args.dataset))
 
     print("Creating data loaders")
 

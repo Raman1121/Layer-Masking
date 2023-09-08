@@ -27,6 +27,13 @@ data:
     val_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OL3I/ol3i/CSV/new_val.csv'
     test_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OL3I/ol3i/CSV/new_test.csv'
     
+  oasis:
+    root_path: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OASIS-1/'
+    img_path: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OASIS-1/All_files'
+    train_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OASIS-1/CSVs/new_train.csv'
+    val_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OASIS-1/CSVs/new_val.csv'
+    test_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OASIS-1/CSVs/new_test.csv'
+
   
 
   

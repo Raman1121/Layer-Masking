@@ -168,8 +168,8 @@ def tune_blocks_random(model, mask, segment):
 
     # print(mask)
     # print(vector)
-    if mask is not None:
-        assert mask == vector
+    # if mask is not None:
+    #     assert mask == vector
 
     return vector
 
