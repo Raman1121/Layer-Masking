@@ -233,6 +233,7 @@ def objective(trial):
                 label_smoothing=args.label_smoothing, reduction="none"
             )
     ece_criterion = utils.ECELoss()
+    args.lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
     optimizer = get_optimizer(args, parameters)
     scaler = torch.cuda.amp.GradScaler() if args.amp else None    
 
@@ -646,6 +647,8 @@ if __name__ == "__main__":
     print("  Params: ")
     best_mask = []
     for key, value in trial.params.items():
+        if(key == 'lr'):
+            continue
         print("    {}: {}".format(key, value))
         best_mask.append(value)
 
@@ -664,12 +667,19 @@ if __name__ == "__main__":
     stats_df_savedir = os.path.join(args.model, args.dataset, "Optuna Run Stats")
     if not os.path.exists(stats_df_savedir):
         os.makedirs(stats_df_savedir)
-    stats_df_name = "Run Stats" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + "_" + args.objective_metric + ".csv"
+    stats_df_name = "Run_Stats_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + "_" + args.objective_metric + ".csv"
+    best_params_df_name = "Best_Params" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + "_" + args.objective_metric + ".csv"
 
     df = study.trials_dataframe()
     df = df.drop(['datetime_start', 'datetime_complete', 'duration', 'system_attrs_completed_rung_0'], axis=1)     # Drop unnecessary columns
     df = df.rename(columns={'value': args.objective_metric})
     df.to_csv(os.path.join(stats_df_savedir, stats_df_name), index=False)
+
+    # Save the best params
+    cols = ["Col {}".format(i) for i in range(len(trial.params))]
+    best_params_df = pd.DataFrame(columns=cols)
+    best_params_df.loc[len(best_params_df)] = list(trial.params.values())
+    best_params_df.to_csv(os.path.join(stats_df_savedir, best_params_df_name), index=False)
 
     #################### Plotting ####################
 
