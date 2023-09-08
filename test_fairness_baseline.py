@@ -165,12 +165,13 @@ def main(args):
     else:
         assert args.mask_path is not None
         mask = np.load(args.mask_path)
-        print("LOADED MASK: ", mask)
         mask = get_masked_model(model, args.tuning_method, mask=mask)
+        print("LOADED MASK: ", mask)
 
-        if(np.all(mask == 1)):  
+        if(np.all(np.array(mask) == 1)):  
             # If the mask contains all ones
-            args.tuning_method = 'FULL_'+args.tuning_method
+            args.tuning_method = 'Vanilla_'+args.tuning_method
+            print("Mask contains all ones. Changing tuning method to: ", args.tuning_method)
             
 
     # Check Tunable Params
