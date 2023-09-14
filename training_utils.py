@@ -202,6 +202,8 @@ def train_one_epoch_fairness(
 
         elif args.sens_attribute == "age":
             if(args.age_type == 'multi'):
+
+                ####################################### ACCURACY #########################################
                 acc1, res_type0, res_type1, res_type2, res_type3, res_type4 = utils.accuracy_by_age(
                     output, target, sens_attr, topk=(1,)
                 )
@@ -211,13 +213,34 @@ def train_one_epoch_fairness(
                 acc_type2 = res_type2[0]
                 acc_type3 = res_type3[0]
                 acc_type4 = res_type4[0]
+
+                ####################################### AUC #########################################
+                auc, auc_type0, auc_type1, auc_type2, auc_type3, auc_type4 = utils.auc_by_age(
+                    output, target, sens_attr, topk=(1,)
+                )
+
+                print("AUC: ", auc)
+                print("AUC Type 0: ", auc_type0)
+                print("AUC Type 1: ", auc_type1)
+                print("AUC Type 2: ", auc_type2)
+                print("AUC Type 3: ", auc_type3)
+                print("AUC Type 4: ", auc_type4)
+
+
             elif(args.age_type == 'binary'):
+
+                # Accuracy
                 acc1, res_type0, res_type1 = utils.accuracy_by_age_binary(
                     output, target, sens_attr, topk=(1,)
                 )
                 acc1 = acc1[0]
                 acc_type0 = res_type0[0]
                 acc_type1 = res_type1[0]
+
+                # AUC
+                auc, auc_type0, auc_type1 = utils.auc_by_age_binary(
+                    output, target, sens_attr, topk=(1,)
+                )
             else:
                 raise NotImplementedError("Age type not implemented")
         else:
@@ -330,31 +353,69 @@ def train_one_epoch_fairness(
 
         elif args.sens_attribute == "age":
             if(args.age_type == 'multi'):
+
+                # ACCURACY
                 if acc_type0 is not np.nan:
                     metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
                 else:
-                    metric_logger.meters["acc_Age0"].update(0.0, n=batch_size)
+                    metric_logger.meters["acc_Age0"].update(0.0, n=0)
 
                 if acc_type1 is not np.nan: 
                     metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
                 else:
-                    metric_logger.meters["acc_Age1"].update(0.0, n=batch_size)
+                    metric_logger.meters["acc_Age1"].update(0.0, n=0)
                 
                 if acc_type2 is not np.nan:
                     metric_logger.meters["acc_Age2"].update(acc_type2.item(), n=batch_size)
                 else:
-                    metric_logger.meters["acc_Age2"].update(0.0, n=batch_size)
+                    metric_logger.meters["acc_Age2"].update(0.0, n=0)
                 
                 if acc_type3 is not np.nan:
                     metric_logger.meters["acc_Age3"].update(acc_type3.item(), n=batch_size)
                 else:
-                    metric_logger.meters["acc_Age3"].update(0.0, n=batch_size)
+                    metric_logger.meters["acc_Age3"].update(0.0, n=0)
 
                 if acc_type4 is not np.nan:
                     metric_logger.meters["acc_Age4"].update(acc_type4.item(), n=batch_size)
                 else:
-                    metric_logger.meters["acc_Age4"].update(0.0, n=batch_size)
+                    metric_logger.meters["acc_Age4"].update(0.0, n=0)
+
+                # AUC
+                if auc is not np.nan:
+                    metric_logger.meters["auc"].update(auc, n=batch_size)
+                else:
+                    metric_logger.meters["auc"].update(0.0, n=0)
+
+                if auc_type0 is not np.nan:
+                    metric_logger.meters["auc_Age0"].update(auc_type0, n=batch_size)
+                else:
+                    metric_logger.meters["auc_Age0"].update(0.0, n=0)
+                
+                if auc_type1 is not np.nan:
+                    metric_logger.meters["auc_Age1"].update(auc_type1, n=batch_size)
+                else:
+                    metric_logger.meters["auc_Age1"].update(0.0, n=0)
+                
+                if auc_type2 is not np.nan:
+                    metric_logger.meters["auc_Age2"].update(auc_type2, n=batch_size)
+                else:
+                    metric_logger.meters["auc_Age2"].update(0.0, n=0)
+                
+                if auc_type3 is not np.nan:
+                    metric_logger.meters["auc_Age3"].update(auc_type3, n=batch_size)
+                else:
+                    metric_logger.meters["auc_Age3"].update(0.0, n=0)
+                
+                if auc_type4 is not np.nan:
+                    metric_logger.meters["auc_Age4"].update(auc_type4, n=batch_size)
+                else:
+                    metric_logger.meters["auc_Age4"].update(0.0, n=0)
+
+
+
             elif(args.age_type == 'binary'):
+
+                # Accuracy
                 if acc_type0 is not np.nan:
                     metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
                 else:
@@ -364,6 +425,23 @@ def train_one_epoch_fairness(
                     metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
                 else:
                     metric_logger.meters["acc_Age1"].update(0.0, n=batch_size)
+
+                # AUC
+                if auc is not np.nan:
+                    metric_logger.meters["auc"].update(auc, n=batch_size)
+                else:
+                    metric_logger.meters["auc"].update(0.0, n=0)
+
+                if auc_type0 is not np.nan:
+                    metric_logger.meters["auc_Age0"].update(auc_type0, n=batch_size)
+                else:
+                    metric_logger.meters["auc_Age0"].update(0.0, n=0)
+                
+                if auc_type1 is not np.nan:
+                    metric_logger.meters["auc_Age1"].update(auc_type1, n=batch_size)
+                else:
+                    metric_logger.meters["auc_Age1"].update(0.0, n=0)
+
             else:
                 raise NotImplementedError("Age type not implemented")
 
@@ -1158,41 +1236,42 @@ def evaluate_fairness_age(
             #print(type(max_val_loss))
             diff_loss = torch.abs(max_val_loss - min_val_loss)
 
-            
+            # Accuracy
             acc1, res_type0, res_type1, res_type2, res_type3, res_type4 = utils.accuracy_by_age(
                 output, target, sens_attr, topk=(1,)
             )
             
             acc1 = acc1[0]
 
+            # AUC
+            auc, auc_type0, auc_type1, auc_type2, auc_type3, auc_type4 = utils.auc_by_age(
+                output, target, sens_attr, topk=(1,)
+            )
+
+            # ACCURACY
             try:
                 acc_type0 = res_type0[0]
             except:
-                acc_type0 = torch.tensor(0.0)
-            
+                acc_type0 = np.nan
             try:
                 acc_type1 = res_type1[0]
             except:
-                acc_type1 = torch.tensor(0.0)
-            
+                acc_type1 = np.nan
             try:
                 acc_type2 = res_type2[0]
             except:
-                acc_type2 = torch.tensor(0.0)
-            
+                acc_type2 = np.nan
             try:
                 acc_type3 = res_type3[0]
             except:
-                acc_type3 = torch.tensor(0.0)
-
+                acc_type3 = np.nan
             try:
                 acc_type4 = res_type4[0]
             except:
-                acc_type4 = torch.tensor(0.0)
+                acc_type4 = np.nan
             
 
             acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
-            auc = 0
 
             batch_size = image.shape[0]
             metric_logger.update(loss=torch.mean(loss).item())
@@ -1200,13 +1279,31 @@ def evaluate_fairness_age(
             metric_logger.update(max_val_loss=max_val_loss)
             metric_logger.update(diff_loss=diff_loss)
             metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
-            metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
-            metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
-            metric_logger.meters["acc_Age2"].update(acc_type2.item(), n=batch_size)
-            metric_logger.meters["acc_Age3"].update(acc_type3.item(), n=batch_size)
-            metric_logger.meters["acc_Age4"].update(acc_type4.item(), n=batch_size)
             metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
-            metric_logger.meters["auc"].update(auc, n=batch_size)
+            if acc_type0 != np.nan:
+                metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
+            if acc_type1 != np.nan:
+                metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
+            if acc_type2 != np.nan:
+                metric_logger.meters["acc_Age2"].update(acc_type2.item(), n=batch_size)
+            if acc_type3 != np.nan:
+                metric_logger.meters["acc_Age3"].update(acc_type3.item(), n=batch_size)
+            if acc_type4 != np.nan:
+                metric_logger.meters["acc_Age4"].update(acc_type4.item(), n=batch_size)
+
+            if auc != np.nan:
+                metric_logger.meters["auc"].update(auc, n=batch_size)
+            if auc_type0 != np.nan:
+                metric_logger.meters["auc_Age0"].update(auc_type0, n=batch_size)
+            if auc_type1 != np.nan:
+                metric_logger.meters["auc_Age1"].update(auc_type1, n=batch_size)
+            if auc_type2 != np.nan:
+                metric_logger.meters["auc_Age2"].update(auc_type2, n=batch_size)
+            if auc_type3 != np.nan:
+                metric_logger.meters["auc_Age3"].update(auc_type3, n=batch_size)
+            if auc_type4 != np.nan:
+                metric_logger.meters["auc_Age4"].update(auc_type4, n=batch_size)
+            
             metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
             metric_logger.meters["diff_loss"].update(diff_loss, n=batch_size)
             num_processed_samples += batch_size
@@ -1240,6 +1337,13 @@ def evaluate_fairness_age(
     acc_age2_avg = metric_logger.acc_Age2.global_avg
     acc_age3_avg = metric_logger.acc_Age3.global_avg
     acc_age4_avg = metric_logger.acc_Age4.global_avg
+
+    auc_avg = metric_logger.auc.global_avg
+    auc_age0_avg = metric_logger.auc_Age0.global_avg
+    auc_age1_avg = metric_logger.auc_Age1.global_avg
+    auc_age2_avg = metric_logger.auc_Age2.global_avg
+    auc_age3_avg = metric_logger.auc_Age3.global_avg
+    auc_age4_avg = metric_logger.auc_Age4.global_avg
 
     return (
         round(acc_avg, 3),
@@ -1335,25 +1439,27 @@ def evaluate_fairness_age_binary(
 
             diff_loss = torch.abs(max_val_loss - min_val_loss)
 
-            
+            # Accuracy
             acc1, res_type0, res_type1 = utils.accuracy_by_age_binary(
                 output, target, sens_attr, topk=(1,)
             )
-            
             acc1 = acc1[0]
-
             try:
                 acc_type0 = res_type0[0]
             except:
                 acc_type0 = torch.tensor(0.0)
-            
             try:
                 acc_type1 = res_type1[0]
             except:
                 acc_type1 = torch.tensor(0.0)
-            
             acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
-            auc = 0
+
+            # AUC
+            auc, auc_type0, auc_type1 = utils.auc_by_age_binary(
+                output, target, sens_attr, topk=(1,)
+            )
+
+
 
             batch_size = image.shape[0]
             metric_logger.update(loss=torch.mean(loss).item())
@@ -1361,10 +1467,17 @@ def evaluate_fairness_age_binary(
             metric_logger.update(max_val_loss=max_val_loss)
             metric_logger.update(diff_loss=diff_loss)
             metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
+            metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
             metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
             metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
-            metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
-            metric_logger.meters["auc"].update(auc, n=batch_size)
+
+            if auc != np.nan:
+                metric_logger.meters["auc"].update(auc, n=batch_size)
+            if auc_type0 != np.nan:
+                metric_logger.meters["auc_Age0"].update(auc_type0, n=batch_size)
+            if auc_type1 != np.nan:
+                metric_logger.meters["auc_Age1"].update(auc_type1, n=batch_size)
+
             metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
             metric_logger.meters["diff_loss"].update(diff_loss, n=batch_size)
             num_processed_samples += batch_size
@@ -1380,6 +1493,10 @@ def evaluate_fairness_age_binary(
     acc_avg = metric_logger.acc1.global_avg
     acc_age0_avg = metric_logger.acc_Age0.global_avg
     acc_age1_avg = metric_logger.acc_Age1.global_avg
+
+    auc_avg = metric_logger.auc.global_avg
+    auc_age0_avg = metric_logger.auc_Age0.global_avg
+    auc_age1_avg = metric_logger.auc_Age1.global_avg
     
 
     return (

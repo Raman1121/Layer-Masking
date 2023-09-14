@@ -1129,6 +1129,76 @@ def accuracy_by_age(output, target, sens_attribute, topk=(1,)):
         return res, res_type0, res_type1, res_type2, res_type3, res_type4
 
 
+def auc_by_age(output, target, sens_attribute, topk=(1,)):
+
+    with torch.inference_mode():
+        maxk = max(topk)
+        batch_size = target.size(0)
+        if target.ndim == 2:
+            target = target.max(dim=1)[1]
+
+        maxk = 1
+        pos_label = 1
+
+        output_with_softmax = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+        target = target.cpu().detach().data
+
+        # If it is a binary classification, we need to convert the output to a shape (n_samples,). More info: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_auc_score.html
+        if(output_with_softmax.shape[1] == 2):
+            output_with_softmax = output_with_softmax[:, 1]
+
+        # Calculate auc for the whole dataset
+        try:
+            score = sklm.roc_auc_score(target, output_with_softmax, multi_class='ovr')
+        except:
+            #import pdb; pdb.set_trace()
+            score = np.nan
+
+        # Calculate AUC for the each age group
+        try:
+            type0_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 0]
+            type0_output = output_with_softmax[type0_indices]
+            type0_target = target[type0_indices]
+            type0_score = sklm.roc_auc_score(type0_target, type0_output, multi_class='ovr')
+        except:
+            import pdb; pdb.set_trace()
+            type0_score = np.nan
+
+        try:
+            type1_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 1]
+            type1_output = output_with_softmax[type1_indices]
+            type1_target = target[type1_indices]
+            type1_score = sklm.roc_auc_score(type1_target, type1_output, multi_class='ovr')
+        except:
+            type1_score = np.nan
+        
+        try:
+            type2_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 2]
+            type2_output = output_with_softmax[type2_indices]
+            type2_target = target[type2_indices]
+            type2_score = sklm.roc_auc_score(type2_target, type2_output, multi_class='ovr')
+        except:
+            type2_score = np.nan
+
+        try:
+            type3_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 3]
+            type3_output = output_with_softmax[type3_indices]
+            type3_target = target[type3_indices]
+            type3_score = sklm.roc_auc_score(type3_target, type3_output, multi_class='ovr')
+        except:
+            type3_score = np.nan
+
+        try:
+            type4_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 4]
+            type4_output = output_with_softmax[type4_indices]
+            type4_target = target[type4_indices]
+            type4_score = sklm.roc_auc_score(type4_target, type4_output, multi_class='ovr')
+        except:
+            type4_score = np.nan
+
+        return score, type0_score, type1_score, type2_score, type3_score, type4_score
+
+
 def accuracy_by_age_binary(output, target, sens_attribute, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k
        for the whole dataset and different age groups separately.
@@ -1171,6 +1241,50 @@ def accuracy_by_age_binary(output, target, sens_attribute, topk=(1,)):
                 res_type1.append(torch.tensor(0.0))
                 
         return res, res_type0, res_type1
+
+def auc_by_age_binary(output, target, sens_attribute, topk=(1,)):
+    with torch.inference_mode():
+        maxk = max(topk)
+        batch_size = target.size(0)
+        if target.ndim == 2:
+            target = target.max(dim=1)[1]
+
+        maxk = 1
+        pos_label = 1
+
+        output_with_softmax = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+        target = target.cpu().detach().data
+
+        # If it is a binary classification, we need to convert the output to a shape (n_samples,). More info: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_auc_score.html
+        if(output_with_softmax.shape[1] == 2):
+            output_with_softmax = output_with_softmax[:, 1]
+
+        # Calculate auc for the whole dataset
+        try:
+            score = sklm.roc_auc_score(target, output_with_softmax, multi_class='ovr')
+        except:
+            #import pdb; pdb.set_trace()
+            score = np.nan
+    
+        # Calculate AUC for the each age group
+        try:
+            type0_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 0]
+            type0_output = output_with_softmax[type0_indices]
+            type0_target = target[type0_indices]
+            type0_score = sklm.roc_auc_score(type0_target, type0_output, multi_class='ovr')
+        except:
+            import pdb; pdb.set_trace()
+            type0_score = np.nan
+
+        try:
+            type1_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 1]
+            type1_output = output_with_softmax[type1_indices]
+            type1_target = target[type1_indices]
+            type1_score = sklm.roc_auc_score(type1_target, type1_output, multi_class='ovr')
+        except:
+            type1_score = np.nan
+
+        return score, type0_score, type1_score
 
 def accuracy(output, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
