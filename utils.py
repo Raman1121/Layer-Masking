@@ -648,7 +648,10 @@ class SmoothedValue:
 
     @property
     def global_avg(self):
-        return self.total / self.count
+        if self.count == 0:
+            return 0.0
+        else:
+            return self.total / self.count
 
     @property
     def max(self):
@@ -931,6 +934,89 @@ def accuracy_by_skin_type(output, target, sens_attribute, topk=(1,), num_skin_ty
         return res, res_type0, res_type1, res_type2, res_type3, res_type4, res_type5
 
 
+def auc_by_skin_type(output, target, sens_attribute, topk=(1,), num_skin_types=6):
+    """Computes the AUC over the k top predictions for the specified values of k
+       for the whole dataset and different skin types separately.
+    """
+    with torch.inference_mode():
+        maxk = max(topk)
+        batch_size = target.size(0)
+        if target.ndim == 2:
+            target = target.max(dim=1)[1]
+
+        maxk = 1
+        pos_label = 1
+
+        output_with_softmax = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+        target = target.cpu().detach().data
+
+        #print("TARGET: ", target)
+
+        # Calculate auc for the whole dataset
+        try:
+            score = sklm.roc_auc_score(target, output_with_softmax, multi_class='ovr')
+        except:
+            score = np.nan
+
+        #print("Output with softmax: ", output_with_softmax)
+        #print("Sens attribute: ", sens_attribute)
+
+        # Calculate AUC for the each skin type
+        try:
+            type0_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 0]
+            type0_output = output_with_softmax[type0_indices]
+            type0_target = target[type0_indices]
+            type0_score = sklm.roc_auc_score(type0_target, type0_output, multi_class='ovr')
+        except:
+            type0_score = np.nan
+
+        try:
+            type1_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 1]
+            #type1_output = output_with_softmax[:, type1_indices]
+            type1_output = output_with_softmax[type1_indices]
+            type1_target = target[type1_indices]
+            type1_score = sklm.roc_auc_score(type1_target, type1_output, multi_class='ovr')
+        except:
+            type1_score = np.nan
+
+        try:
+            type2_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 2]
+            #type2_output = output_with_softmax[:, type2_indices]
+            type2_output = output_with_softmax[type2_indices]
+            type2_target = target[type2_indices]
+            type2_score = sklm.roc_auc_score(type2_target, type2_output, multi_class='ovr')
+        except:
+            type2_score = np.nan
+
+        try:
+            type3_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 3]
+            #type3_output = output_with_softmax[:, type3_indices]
+            type3_output = output_with_softmax[type3_indices]
+            type3_target = target[type3_indices]
+            type3_score = sklm.roc_auc_score(type3_target, type3_output, multi_class='ovr')
+        except:
+            type3_score = np.nan
+
+        try:
+            type4_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 4]
+            type4_output = output_with_softmax[type4_indices]
+            type4_target = target[type4_indices]
+            type4_score = sklm.roc_auc_score(type4_target, type4_output, multi_class='ovr')
+        except:
+            type4_score = np.nan
+
+        try:
+            type5_indices = [i for i, _skin_type in enumerate(sens_attribute) if _skin_type == 5]
+            #type5_output = output_with_softmax[:, type5_indices]
+            type5_output = output_with_softmax[type5_indices]
+            type5_target = target[type5_indices]
+            type5_score = sklm.roc_auc_score(type5_target, type5_output, multi_class='ovr')
+        except:
+            type5_score = np.nan
+
+        return score, type0_score, type1_score, type2_score, type3_score, type4_score, type5_score
+                
+
 def accuracy_by_age(output, target, sens_attribute, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k
        for the whole dataset and different age groups separately.
@@ -1049,7 +1135,23 @@ def accuracy_by_age_binary(output, target, sens_attribute, topk=(1,)):
                 
         return res, res_type0, res_type1
 
+def accuracy(output, target, topk=(1,)):
+    """Computes the accuracy over the k top predictions for the specified values of k"""
+    with torch.inference_mode():
+        maxk = max(topk)
+        batch_size = target.size(0)
+        if target.ndim == 2:
+            target = target.max(dim=1)[1]
 
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target[None])
+
+        res = []
+        for k in topk:
+            correct_k = correct[:k].flatten().sum(dtype=torch.float32)
+            res.append(correct_k * (100.0 / batch_size))
+        return res
 
 def auc(output, target, **kwargs):
     """Computes the top-1 AUC (Area Under the Curve)"""
@@ -1063,10 +1165,13 @@ def auc(output, target, **kwargs):
         maxk = 1
         _, pred = output.topk(maxk, 1, True, True)
         pred = pred.t().flatten().cpu().numpy()
+        #print("OUTPUT: ", torch.softmax(output, dim=1).cpu().data.numpy())
+        #TODO: Check if the pred contains probabilities: elements should be between 0 and 1
         # pred_probs = torch.sigmoid(output).cpu().data.numpy()
 
         # Convert the tensors to NumPy arrays
         target = target.cpu().data.numpy()
+        #print("TARGETS: ", target)
         # pred_probs = pred_probs.detach().cpu().numpy()
         # print(pred.shape, target.shape)
         # Calculate the AUC using sklearn's roc_auc_score function
@@ -1077,35 +1182,56 @@ def auc(output, target, **kwargs):
 
         return auc
 
-
-def roc_auc_score_multiclass(pred_class, actual_class, average="macro"):
+def roc_auc_score_multiclass(output, target):
     with torch.inference_mode():
-        batch_size = actual_class.size(0)
-        if actual_class.ndim == 2:
-            actual_class = actual_class.max(dim=1)[1]
+        batch_size = target.size(0)
+        if target.ndim == 2:
+            target = target.max(dim=1)[1]
 
     maxk = 1
-    _, pred_class = pred_class.topk(maxk, 1, True, True)
-    pred_class = pred_class.t().flatten().cpu().numpy()
+    output_with_softmax = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+    # best_prob, best_prob_idx = output_with_softmax.topk(maxk, 1, True, True)
+    # best_prob = best_prob.t().flatten().cpu().detach().data.numpy()
+    target = target.cpu().detach().data.numpy()
 
-    actual_class = actual_class.cpu().data.numpy()
+    #print("output_with_softmax: ", output_with_softmax)
+    #print("TARGET: ", target)
+    pos_label = 1
+    score = sklm.roc_auc_score(target, output_with_softmax, multi_class='ovr')
+
+    return score
+
+
+# def roc_auc_score_multiclass(pred_class, actual_class, average="macro"):
+#     with torch.inference_mode():
+#         batch_size = actual_class.size(0)
+#         if actual_class.ndim == 2:
+#             actual_class = actual_class.max(dim=1)[1]
+
+#     maxk = 1
+#     _, pred_class = pred_class.topk(maxk, 1, True, True)
+#     pred_class = pred_class.t().flatten().cpu().numpy()
+
+#     actual_class = actual_class.cpu().data.numpy()
+
+#     roc_auc = sklm.roc_auc_score(actual_class, pred_class, average=average, multi_class="ovr")
 
     # creating a set of all the unique classes using the actual class list
-    unique_class = set(actual_class)
-    roc_auc_dict = {}
-    for per_class in unique_class:
-        # creating a list of all the classes except the current class
-        other_class = [x for x in unique_class if x != per_class]
+    # unique_class = set(actual_class)
+    # roc_auc_dict = {}
+    # for per_class in unique_class:
+    #     # creating a list of all the classes except the current class
+    #     other_class = [x for x in unique_class if x != per_class]
 
-        # marking the current class as 1 and all other classes as 0
-        new_actual_class = [0 if x in other_class else 1 for x in actual_class]
-        new_pred_class = [0 if x in other_class else 1 for x in pred_class]
+    #     # marking the current class as 1 and all other classes as 0
+    #     new_actual_class = [0 if x in other_class else 1 for x in actual_class]
+    #     new_pred_class = [0 if x in other_class else 1 for x in pred_class]
 
-        # using the sklearn metrics method to calculate the roc_auc_score
-        roc_auc = sklm.roc_auc_score(new_actual_class, new_pred_class, average=average)
-        roc_auc_dict[per_class] = roc_auc
+    #     # using the sklearn metrics method to calculate the roc_auc_score
+    #     roc_auc = sklm.roc_auc_score(new_actual_class, new_pred_class, average=average, multi_class="ovr")
+    #     roc_auc_dict[per_class] = roc_auc
 
-    return roc_auc_dict
+    # return roc_auc_dict
 
 
 def mkdir(path):

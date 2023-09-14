@@ -26,6 +26,40 @@ import yaml
 from pprint import pprint
 
 
+def create_results_df(args):
+
+    test_results_df = None
+    
+    if(args.sens_attribute == 'gender'):
+        test_results_df = pd.DataFrame(
+                columns=[
+                    "Tuning Method",
+                    "Train Percent",
+                    "LR",
+                    "Test Acc Overall",
+                    "Test Acc Male",
+                    "Test Acc Female",
+                    "Test Acc Difference",
+                ]
+            )  
+    elif(args.sens_attribute == 'skin_type' or args.sens_attribute == 'age'):
+        test_results_df = pd.DataFrame(
+                columns=[
+                    "Tuning Method",
+                    "Train Percent",
+                    "LR",
+                    "Test Acc Overall",
+                    "Test Acc (Best)",
+                    "Test Acc (Worst)",
+                    "Test Acc Difference",
+                ]
+            )  
+    else:
+        raise NotImplementedError
+
+    return test_results_df
+
+
 def main(args):
     assert args.sens_attribute is not None, "Sensitive attribute not provided"
     if args.save_flag:
@@ -99,60 +133,42 @@ def main(args):
     except:
         # columns=['Tuning Method','Train Percent','LR Scaler', 'Inner LR', 'Outer LR','Test Acc@1','Vector Path']
         print("Creating new results dataframe")
-        if(args.sens_attribute == 'gender'):
-            # results_df = pd.DataFrame(
-            #     columns=[
-            #         "Tuning Method",
-            #         "Train Percent",
-            #         "LR",
-            #         "Test Acc@1",
-            #         "Test Acc Male",
-            #         "Test Acc Female",
-            #         "Test Acc Difference",
-            #     ]
-            # )
-            test_results_df = pd.DataFrame(
-                columns=[
-                    "Tuning Method",
-                    "Train Percent",
-                    "LR Scaler",
-                    "Inner LR",
-                    "Outer LR",
-                    "Test Acc@1",
-                    "Test Acc Male",
-                    "Test Acc Female",
-                    "Test Acc Difference",
-                    "Vector Path",
-                ]
-            )   
-        elif(args.sens_attribute == 'skin_type' or args.sens_attribute == 'age'):
-            # results_df = pd.DataFrame(
-            #     columns=[
-            #         "Tuning Method",
-            #         "Train Percent",
-            #         "LR",
-            #         "Test Acc@1",
-            #         "Test Acc Male",
-            #         "Test Acc Female",
-            #         "Test Acc Difference",
-            #     ]
-            # )
-            test_results_df = pd.DataFrame(
-                columns=[
-                    "Tuning Method",
-                    "Train Percent",
-                    "LR Scaler",
-                    "Inner LR",
-                    "Outer LR",
-                    "Test Acc@1",
-                    "Test Acc (Best)",
-                    "Test Acc (Worst)",
-                    "Test Acc Difference",
-                    "Vector Path",
-                ]
-            )  
-        else:
-            raise NotImplementedError
+        test_results_df = create_results_df(args)
+
+        # if(args.sens_attribute == 'gender'):
+            
+        #     test_results_df = pd.DataFrame(
+        #         columns=[
+        #             "Tuning Method",
+        #             "Train Percent",
+        #             "LR Scaler",
+        #             "Inner LR",
+        #             "Outer LR",
+        #             "Test Acc@1",
+        #             "Test Acc Male",
+        #             "Test Acc Female",
+        #             "Test Acc Difference",
+        #             "Vector Path",
+        #         ]
+        #     )   
+        # elif(args.sens_attribute == 'skin_type' or args.sens_attribute == 'age'):
+            
+        #     test_results_df = pd.DataFrame(
+        #         columns=[
+        #             "Tuning Method",
+        #             "Train Percent",
+        #             "LR Scaler",
+        #             "Inner LR",
+        #             "Outer LR",
+        #             "Test Acc@1",
+        #             "Test Acc (Best)",
+        #             "Test Acc (Worst)",
+        #             "Test Acc Difference",
+        #             "Vector Path",
+        #         ]
+        #     )  
+        # else:
+        #     raise NotImplementedError
 
     utils.init_distributed_mode(args)
     print(args)
@@ -387,6 +403,12 @@ def main(args):
         for epoch in range(args.start_epoch, args.epochs):
             if args.distributed:
                 train_sampler.set_epoch(epoch)
+
+            # if(epoch == args.epochs-1):
+            #     get_auc = True
+            # else:
+            #     get_auc = False
+            get_auc = True
             train_one_epoch_fairness(
                 model,
                 criterion,
@@ -398,6 +420,7 @@ def main(args):
                 args,
                 model_ema,
                 scaler,
+                get_auc=get_auc,
             )
             lr_scheduler.step()
 
@@ -426,6 +449,12 @@ def main(args):
                     )
                 )
             elif args.sens_attribute == "skin_type":
+
+                # if(epoch == args.epochs-1):
+                #     get_auc = True
+                # else:
+                #     get_auc = False
+                get_auc = True
                 (
                     val_acc,
                     val_acc_type0,
@@ -443,6 +472,7 @@ def main(args):
                     data_loader_val,
                     args=args,
                     device=device,
+                    get_auc=get_auc,
                 )
                 print(
                     "Val Acc: {:.2f}, Val Type 0 Acc: {:.2f}, Val Type 1 Acc: {:.2f}, Val Type 2 Acc: {:.2f}, Val Type 3 Acc: {:.2f}, Val Type 4 Acc: {:.2f}, Val Type 5 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
@@ -459,61 +489,61 @@ def main(args):
                 )
             elif args.sens_attribute == "age":
                 if(args.age_type == 'multi'):
-                (
-                    val_acc,
-                    acc_age0_avg,
-                    acc_age1_avg,
-                    acc_age2_avg,
-                    acc_age3_avg,
-                    acc_age4_avg,
-                    val_loss,
-                    val_max_loss,
-                ) = evaluate_fairness_age(
-                    model,
-                    criterion,
-                    ece_criterion,
-                    data_loader_val,
-                    args=args,
-                    device=device,
-                )
-                print(
-                    "Val Acc: {:.2f}, Val Age Group0 Acc: {:.2f}, Val Age Group1 Acc: {:.2f}, Val Age Group2 Acc: {:.2f}, Val Age Group3 Acc: {:.2f}, Val Age Group4 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
+                    (
                         val_acc,
                         acc_age0_avg,
                         acc_age1_avg,
                         acc_age2_avg,
                         acc_age3_avg,
                         acc_age4_avg,
-                        torch.mean(val_loss),
+                        val_loss,
                         val_max_loss,
+                    ) = evaluate_fairness_age(
+                        model,
+                        criterion,
+                        ece_criterion,
+                        data_loader_val,
+                        args=args,
+                        device=device,
                     )
-                )
-            elif(args.age_type == 'binary'):
-                (
-                    val_acc,
-                    acc_age0_avg,
-                    acc_age1_avg,
-                    val_loss,
-                    val_max_loss,
-                ) = evaluate_fairness_age_binary(
-                    model,
-                    criterion,
-                    ece_criterion,
-                    data_loader_val,
-                    args=args,
-                    device=device,
-                )
-                print(
-                    "Val Acc: {:.2f}, Val Age Group0 Acc: {:.2f}, Val Age Group1 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
+                    print(
+                        "Val Acc: {:.2f}, Val Age Group0 Acc: {:.2f}, Val Age Group1 Acc: {:.2f}, Val Age Group2 Acc: {:.2f}, Val Age Group3 Acc: {:.2f}, Val Age Group4 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
+                            val_acc,
+                            acc_age0_avg,
+                            acc_age1_avg,
+                            acc_age2_avg,
+                            acc_age3_avg,
+                            acc_age4_avg,
+                            torch.mean(val_loss),
+                            val_max_loss,
+                        )
+                    )
+                elif(args.age_type == 'binary'):
+                    (
                         val_acc,
                         acc_age0_avg,
                         acc_age1_avg,
-                        torch.mean(val_loss),
+                        val_loss,
                         val_max_loss,
+                    ) = evaluate_fairness_age_binary(
+                        model,
+                        criterion,
+                        ece_criterion,
+                        data_loader_val,
+                        args=args,
+                        device=device,
                     )
-                )
-            else:
-                raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
+                    print(
+                        "Val Acc: {:.2f}, Val Age Group0 Acc: {:.2f}, Val Age Group1 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
+                            val_acc,
+                            acc_age0_avg,
+                            acc_age1_avg,
+                            torch.mean(val_loss),
+                            val_max_loss,
+                        )
+                    )
+                else:
+                    raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
             else:
                 raise NotImplementedError
 
@@ -565,8 +595,8 @@ def main(args):
                     val_acc,
                     val_male_acc,
                     val_female_acc,
-                    abs(val_male_acc - val_female_acc),
-                    mask_filename,
+                    round(abs(val_male_acc - val_female_acc), 3),
+                    #mask_filename,
                 ]
             elif(args.sens_attribute == 'skin_type'):
 
@@ -580,12 +610,18 @@ def main(args):
                     val_acc,
                     best_acc,
                     worst_acc,
-                    abs(best_acc - worst_acc),
-                    mask_filename,
+                    round(abs(best_acc - worst_acc), 3),
+                    #mask_filename,
                 ]
             elif(args.sens_attribute == 'age'):
-                best_acc = max(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
-                worst_acc = min(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
+                if(args.age_type == 'multi'):
+                    best_acc = max(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
+                    worst_acc = min(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
+                elif(args.age_type == 'binary'):
+                    best_acc = max(acc_age0_avg, acc_age1_avg)
+                    worst_acc = min(acc_age0_avg, acc_age1_avg)
+                else:
+                    raise NotImplementedError("Age type not implemented")
 
                 new_row = [
                     args.tuning_method,
@@ -594,8 +630,8 @@ def main(args):
                     val_acc,
                     best_acc,
                     worst_acc,
-                    abs(best_acc - worst_acc),
-                    mask_filename,
+                    round(abs(best_acc - worst_acc), 3),
+                    #mask_filename,
                 ]
 
         elif args.masking_vector is not None or args.subnetwork_mask_name is not None:
@@ -604,7 +640,7 @@ def main(args):
                 trainable_percentage,
                 args.lr,
                 val_acc,
-                convert_numpy_array_to_string(mask),
+                #convert_numpy_array_to_string(mask),
             ]
         else:
             new_row = [
@@ -612,7 +648,7 @@ def main(args):
                 trainable_percentage,
                 args.lr,
                 val_acc,
-                os.path.join(args.vector_savepath, filename),
+                #os.path.join(args.vector_savepath, filename),
             ]
 
         # results_df.loc[len(results_df)] = new_row
@@ -665,6 +701,7 @@ def main(args):
                 data_loader_test,
                 args=args,
                 device=device,
+                get_auc=True,
             )
             print("\n")
             print("Test Type 0 Accuracy: ", test_acc_type0)
@@ -694,6 +731,7 @@ def main(args):
                     device=device,
                 )
                 print("\n")
+                print("Test Overall accuracy: ", test_acc)
                 print("Test Age Group 0 Accuracy: ", test_acc_type0)
                 print("Test Age Group 1 Accuracy: ", test_acc_type1)
                 print("Test Age Group 2 Accuracy: ", test_acc_type2)
@@ -715,6 +753,7 @@ def main(args):
                     device=device,
                 )
                 print("\n")
+                print("Test Overall accuracy: ", test_acc)
                 print("Test Age Group 0 Accuracy: ", test_acc_type0)
                 print("Test Age Group 1 Accuracy: ", test_acc_type1)
             else:
@@ -722,7 +761,6 @@ def main(args):
         else:
             raise NotImplementedError
 
-        print("Test accuracy: ", test_acc)
         print("Test loss: ", round(torch.mean(test_loss).item(), 3))
         print("Test max loss: ", round(test_max_loss.item(), 3))
 
@@ -732,18 +770,7 @@ def main(args):
         # Here we are adding results on the test set
         if args.masking_vector_idx is not None:
             if(args.sens_attribute == 'gender'):
-                new_row2 = [
-                    args.tuning_method,
-                    round(trainable_percentage, 3),
-                    np.nan,
-                    args.lr,
-                    np.nan,
-                    test_acc,
-                    test_male_acc,
-                    test_female_acc,
-                    round(abs(test_male_acc - test_female_acc), 3),
-                    mask_filename,
-                ]
+                new_row2 = [args.tuning_method, round(trainable_percentage, 3), np.nan, args.lr, np.nan, test_acc, test_male_acc, test_female_acc, round(abs(test_male_acc - test_female_acc), 3), mask_filename]
             else:
                 if(args.sens_attribute == 'skin_type'):
                     best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
@@ -758,32 +785,51 @@ def main(args):
                     else:
                         raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
                         
+                # new_row2 = [
+                #     args.tuning_method,
+                #     round(trainable_percentage, 3),
+                #     np.nan,
+                #     args.lr,
+                #     np.nan,
+                #     test_acc,
+                #     best_acc,
+                #     worst_acc,
+                #     round(abs(best_acc - worst_acc), 3),
+                #     mask_filename,
+                # ]
                 new_row2 = [
                     args.tuning_method,
                     round(trainable_percentage, 3),
-                    np.nan,
                     args.lr,
-                    np.nan,
                     test_acc,
                     best_acc,
                     worst_acc,
                     round(abs(best_acc - worst_acc), 3),
-                    mask_filename,
                 ]
             
         elif args.masking_vector is not None or args.subnetwork_mask_name is not None:
+            # new_row2 = [
+            #     "Subnetwork_" + args.tuning_method,
+            #     round(trainable_percentage, 3),
+            #     np.nan,
+            #     args.lr,
+            #     np.nan,
+            #     test_acc,
+            #     test_male_acc,
+            #     test_female_acc,
+            #     round(abs(test_male_acc - test_female_acc), 3),
+            #     convert_numpy_array_to_string(mask),
+            # ]
             new_row2 = [
                 "Subnetwork_" + args.tuning_method,
                 round(trainable_percentage, 3),
-                np.nan,
                 args.lr,
-                np.nan,
                 test_acc,
                 test_male_acc,
                 test_female_acc,
                 round(abs(test_male_acc - test_female_acc), 3),
-                convert_numpy_array_to_string(mask),
             ]
+            
         test_results_df.loc[len(test_results_df)] = new_row2
 
         print(
@@ -809,15 +855,16 @@ if __name__ == "__main__":
         + args.model
         + ".csv"
     )
-    args.test_results_df = (
-        "Fairness_Test_set_results_"
-        + args.sens_attribute
-        + "_"
-        + args.tuning_method
-        + "_"
-        + args.model
-        + ".csv"
-    )
+    # args.test_results_df = (
+    #     "Fairness_Test_set_results_"
+    #     + args.sens_attribute
+    #     + "_"
+    #     + args.tuning_method
+    #     + "_"
+    #     + args.model
+    #     + ".csv"
+    # )
+    args.test_results_df = "Fairness_Optuna_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + "_" + args.objective_metric + ".csv"
 
     current_wd = os.getcwd()
     args.vector_savepath = os.path.join(
