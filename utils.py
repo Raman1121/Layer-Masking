@@ -849,6 +849,43 @@ def accuracy_by_gender(output, target, sens_attribute, topk=(1,)):
 
         return res, res_male, res_female
 
+def auc_by_gender(output, target, sens_attribute, topk=(1,)):
+    with torch.inference_mode():
+        maxk = max(topk)
+        batch_size = target.size(0)
+        if target.ndim == 2:
+            target = target.max(dim=1)[1]
+
+        maxk = 1
+        pos_label = 1
+
+        output_with_softmax = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+        target = target.cpu().detach().data
+
+        try:
+            score = sklm.roc_auc_score(target, output_with_softmax, multi_class='ovr')
+        except:
+            score = np.nan
+
+        try:
+            type0_indices = [i for i, gender in enumerate(sens_attribute) if gender == 'M']
+            type0_output = output_with_softmax[type0_indices]
+            type0_target = target[type0_indices]
+            type0_score = sklm.roc_auc_score(type0_target, type0_output, multi_class='ovr')
+        except:
+            type0_score = np.nan
+
+        try:
+            type1_indices = [i for i, gender in enumerate(sens_attribute) if gender == 'F']
+            type1_output = output_with_softmax[type1_indices]
+            type1_target = target[type1_indices]
+            type1_score = sklm.roc_auc_score(type1_target, type1_output, multi_class='ovr')
+        except:
+            type1_score = np.nan
+
+        return score, type0_score, type1_score
+        
+
 def accuracy_by_skin_type(output, target, sens_attribute, topk=(1,), num_skin_types=6):
     """Computes the accuracy over the k top predictions for the specified values of k
        for the whole dataset and different skin types separately.

@@ -166,12 +166,19 @@ def train_one_epoch_fairness(
         # acc1, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
         # auc = utils.auc(output, target, pos_label=kwargs['pos_label'])
         if args.sens_attribute == "gender":
+
+            ####################################### ACCURACY #########################################
             acc1, acc_male, acc_female = utils.accuracy_by_gender(
                 output, target, sens_attr, topk=(1, args.num_classes)
             )
             acc1 = acc1[0]
             acc_male = acc_male[0]
             acc_female = acc_female[0]
+
+            ########################################## AUC ############################################
+            auc, auc_male, auc_female = utils.auc_by_gender(
+                output, target, sens_attr, topk=(1, args.num_classes)
+            )
 
         elif args.sens_attribute == "skin_type":
 
@@ -225,8 +232,27 @@ def train_one_epoch_fairness(
         metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
 
         if args.sens_attribute == "gender":
+            ####################################### ACCURACY #########################################
             metric_logger.meters["acc1_male"].update(acc_male.item(), n=batch_size)
             metric_logger.meters["acc1_female"].update(acc_female.item(), n=batch_size)
+
+            ####################################### AUC #########################################
+
+            if auc is not np.nan:
+                metric_logger.meters["auc"].update(auc, n=batch_size)
+            else:
+                metric_logger.meters["auc"].update(0.0, n=0)
+
+            if auc_male is not np.nan:
+                metric_logger.meters["auc_male"].update(auc_male, n=batch_size)
+            else:
+                metric_logger.meters["auc_male"].update(0.0, n=0)
+
+            if auc_female is not np.nan:
+                metric_logger.meters["auc_female"].update(auc_female, n=batch_size)
+            else:
+                metric_logger.meters["auc_female"].update(0.0, n=0)
+
         elif args.sens_attribute == "skin_type":
             
             ####################################### ACCURACY #########################################
@@ -266,6 +292,12 @@ def train_one_epoch_fairness(
 
 
             ######################################## AUC ############################################
+
+            if auc is not np.nan:
+                metric_logger.meters["auc"].update(auc, n=batch_size)
+            else:
+                metric_logger.meters["auc"].update(0.0, n=0)
+
             if auc_type0 is not np.nan:
                 metric_logger.meters["auc_type0"].update(acc_type0.item(), n=batch_size)
             else:
@@ -685,6 +717,8 @@ def evaluate_fairness_gender(
             # Take the maximum of the two losses
             max_val_loss = max(avg_loss_male, avg_loss_female)
             diff_loss = torch.abs(avg_loss_male - avg_loss_female)
+
+            # Accuracy
             acc1, acc_male, acc_female = utils.accuracy_by_gender(
                 output, target, sens_attr, topk=(1,)
             )
@@ -692,8 +726,11 @@ def evaluate_fairness_gender(
             acc_male = acc_male[0]
             acc_female = acc_female[0]
 
+            
             acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
-            auc = 0
+
+            # AUC
+            auc, auc_male, auc_female = utils.auc_by_gender(output, target, sens_attr, topk=(1, args.num_classes))
 
             batch_size = image.shape[0]
             metric_logger.update(loss=torch.mean(loss).item())
@@ -704,7 +741,14 @@ def evaluate_fairness_gender(
             metric_logger.meters["acc1_male"].update(acc_male.item(), n=batch_size)
             metric_logger.meters["acc1_female"].update(acc_female.item(), n=batch_size)
             metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
-            metric_logger.meters["auc"].update(auc, n=batch_size)
+
+            if auc is not np.nan:
+                metric_logger.meters["auc"].update(auc, n=batch_size)
+            if auc_male is not np.nan:
+                metric_logger.meters["auc_male"].update(auc_male, n=batch_size)
+            if auc_female is not np.nan:
+                metric_logger.meters["auc_female"].update(auc_female, n=batch_size)
+
             metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
             metric_logger.meters["diff_loss"].update(diff_loss, n=batch_size)
             num_processed_samples += batch_size
@@ -733,6 +777,10 @@ def evaluate_fairness_gender(
     acc_avg = metric_logger.acc1.global_avg
     male_acc_avg = metric_logger.acc1_male.global_avg
     female_acc_avg = metric_logger.acc1_female.global_avg
+
+    auc_avg = metric_logger.auc.global_avg
+    male_auc_avg = metric_logger.auc_male.global_avg
+    female_auc_avg = metric_logger.auc_female.global_avg
 
     return (
         round(acc_avg, 3),
@@ -905,40 +953,7 @@ def evaluate_fairness_skin_type(
             except:
                 acc_type5 = np.nan
 
-
-            # AUC
-            # try:
-            #     auc_type0 = res_type0[0]
-            # except:
-            #     auc_type0 = np.nan
-            
-            # try:
-            #     auc_type1 = res_type1[0]
-            # except:
-            #     auc_type1 = np.nan
-            
-            # try:
-            #     auc_type2 = res_type2[0]
-            # except:
-            #     auc_type2 = np.nan
-            
-            # try:
-            #     auc_type3 = res_type3[0]
-            # except:
-            #     auc_type3 = np.nan
-
-            # try:
-            #     auc_type4 = res_type4[0]
-            # except:
-            #     auc_type4 = np.nan
-            
-            # try:
-            #     auc_type5 = res_type5[0]
-            # except:
-            #     auc_type5 = np.nan
-
             acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
-            auc = 0
 
             batch_size = image.shape[0]
             metric_logger.update(loss=torch.mean(loss).item())
@@ -946,7 +961,8 @@ def evaluate_fairness_skin_type(
             metric_logger.update(max_val_loss=max_val_loss)
             metric_logger.update(diff_loss=diff_loss)
             metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
-
+            
+            
             if(acc_type0 != np.nan):
                 metric_logger.meters["acc_type0"].update(acc_type0.item(), n=batch_size)
             if(acc_type1 != np.nan):
@@ -960,7 +976,9 @@ def evaluate_fairness_skin_type(
             if(acc_type5 != np.nan):
                 metric_logger.meters["acc_type5"].update(acc_type5.item(), n=batch_size)
 
-            if(auc_type0 != np.nan):
+            if(auc != np.nan):
+                metric_logger.meters["auc"].update(auc, n=batch_size)
+            if(auc_type0 != np.nan):    
                 metric_logger.meters["auc_type0"].update(auc_type0, n=batch_size)
             if(auc_type1 != np.nan):
                 metric_logger.meters["auc_type1"].update(auc_type1, n=batch_size)
@@ -1009,6 +1027,14 @@ def evaluate_fairness_skin_type(
     acc_type3_avg = metric_logger.acc_type3.global_avg
     acc_type4_avg = metric_logger.acc_type4.global_avg
     acc_type5_avg = metric_logger.acc_type5.global_avg
+
+    auc_avg = metric_logger.auc.global_avg
+    auc_type0_avg = metric_logger.auc_type0.global_avg
+    auc_type1_avg = metric_logger.auc_type1.global_avg
+    auc_type2_avg = metric_logger.auc_type2.global_avg
+    auc_type3_avg = metric_logger.auc_type3.global_avg
+    auc_type4_avg = metric_logger.auc_type4.global_avg
+    auc_type5_avg = metric_logger.auc_type5.global_avg
 
     return (
         round(acc_avg, 3),
@@ -1173,7 +1199,7 @@ def evaluate_fairness_age(
             metric_logger.update(ece_loss=ece_loss.item())
             metric_logger.update(max_val_loss=max_val_loss)
             metric_logger.update(diff_loss=diff_loss)
-            metric_logger.meters["acc1"].update(acc1_orig.item(), n=batch_size)
+            metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
             metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
             metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
             metric_logger.meters["acc_Age2"].update(acc_type2.item(), n=batch_size)
@@ -1334,7 +1360,7 @@ def evaluate_fairness_age_binary(
             metric_logger.update(ece_loss=ece_loss.item())
             metric_logger.update(max_val_loss=max_val_loss)
             metric_logger.update(diff_loss=diff_loss)
-            metric_logger.meters["acc1"].update(acc1_orig.item(), n=batch_size)
+            metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
             metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
             metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
             metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
