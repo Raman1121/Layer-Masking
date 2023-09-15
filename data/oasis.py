@@ -9,10 +9,11 @@ import random
 import yaml
 from PIL import Image
 
-class HAM10000Dataset(Dataset):
-    def __init__(self, df, sens_attribute, transform=None, age_type='multi'):
+class OASISDataset(Dataset):
+    def __init__(self, df, sens_attribute=None, transform=None, age_type=None):
 
         assert sens_attribute is not None
+        assert age_type is not None 
 
         self.df = df
         self.transform = transform
@@ -25,44 +26,31 @@ class HAM10000Dataset(Dataset):
         return len(self.df)
     
     def get_num_classes(self):
-        return self.df['dx_index'].unique()
-
-    def _get_original_labels(self):
-        return {'akiec':"Bowen's disease",
-                'bcc':'basal cell carcinoma',
-                'bkl':'benign keratosis-like lesions',
-                'df':'dermatofibroma',
-                'nv':'melanocytic nevi',
-                'mel':'melanoma',
-                'vasc':'vascular lesions'}
+        return self.df['CDR'].unique()
     
     def _get_class_to_idx(self):
-        return {'akiec':0,
-                'bcc':1,
-                'bkl':2,
-                'df':3,
-                'nv':4,
-                'mel':5,
-                'vasc':6}
+        return {0:'Non-Demented',
+                1:'Very Mild-Dementia',
+                2:'Mild-Dementia',
+                3:'Moderate-Dementia'
+                }
     
     def __getitem__(self, idx):
-        image = read_image(self.df.iloc[idx]['Path'], mode=ImageReadMode.RGB)
-        image = T.ToPILImage()(image)
-        label = torch.tensor(self.df.iloc[idx]['dx_index'])
-        #label = torch.tensor(self.df.iloc[idx]['binaryLabel'])
-
-        #print("LABEL: ", label)
+        img_path = self.df.iloc[idx]['Path']
+        image = np.load(img_path).astype(np.uint8)
+        image = Image.fromarray(image).convert("RGB")
+        label = torch.tensor(self.df.iloc[idx]['CDR']).to(torch.int64)
 
         if(self.sens_attribute == 'gender'):
-            sens_attribute = self.df.iloc[idx]['sex']
+            sens_attribute = self.df.iloc[idx]['Gender']
         elif(self.sens_attribute == 'age'):
             if(self.age_type == 'multi'):
                 sens_attribute = self.df.iloc[idx]['Age_multi']
             elif(self.age_type == 'binary'):
                 sens_attribute = self.df.iloc[idx]['Age_binary']
-        else:
-            raise ValueError('Invalid sensitive attribute for HAM10000 dataset')
-        
+            else:
+                raise NotImplementedError("Age type not implemented")
+
         if self.transform:
             image = self.transform(image)
         

@@ -369,6 +369,8 @@ def get_args_parser(add_help=True):
                         default=None,
                         help='Sensitive attribute to be used for fairness')
     parser.add_argument('--age_type', type=str, default='multi', choices=['binary', 'multi'])
+    parser.add_argument('--skin_type', type=str, default='multi', choices=['binary', 'multi'])
+    parser.add_argument('--use_metric', type=str, default='acc', choices=['acc', 'auc'])
 
     # HPARAM OPT Arguements
     parser.add_argument("--objective_metric", type=str, default="min_acc", choices=["min_acc", "acc_diff", "max_loss", "overall_acc"])
