@@ -323,7 +323,7 @@ def main(args):
                 )
             elif args.sens_attribute == "skin_type":
 
-                if(args.skin_type_type == 'multi'):
+                if(args.skin_type == 'multi'):
                     (
                         val_acc,
                         val_acc_type0,
@@ -375,7 +375,7 @@ def main(args):
                     )
                     print("\n")
 
-                elif(args.skin_type_type == 'binary'):
+                elif(args.skin_type == 'binary'):
                     (
                         val_acc,
                         val_acc_type0,
@@ -555,7 +555,7 @@ def main(args):
             print("Test Female AUC: ", test_female_auc)
 
         elif args.sens_attribute == "skin_type":
-            if(args.skin_type_type == 'multi'):
+            if(args.skin_type == 'multi'):
                 (
                     test_acc,
                     test_acc_type0,
@@ -598,7 +598,7 @@ def main(args):
                 print("Test Type 4 AUC: ", test_auc_type4)
                 print("Test Type 5 AUC: ", test_auc_type5)
             
-            elif(args.skin_type_type == 'binary'):
+            elif(args.skin_type == 'binary'):
                 (
                     test_acc,
                     test_acc_type0,
@@ -717,14 +717,14 @@ def main(args):
 
         elif(args.sens_attribute == 'skin_type'):
             
-            if(args.skin_type_type == 'multi'):
+            if(args.skin_type == 'multi'):
                 best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
                 worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
 
                 best_auc = max(test_auc_type0, test_auc_type1, test_auc_type2, test_auc_type3, test_auc_type4, test_auc_type5)
                 worst_auc = min(test_auc_type0, test_auc_type1, test_auc_type2, test_auc_type3, test_auc_type4, test_auc_type5)
             
-            elif(args.skin_type_type == 'binary'):
+            elif(args.skin_type == 'binary'):
                 best_acc = max(test_acc_type0, test_acc_type1)
                 worst_acc = min(test_acc_type0, test_acc_type1)
 

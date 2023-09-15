@@ -976,7 +976,7 @@ def accuracy_by_skin_type(output, target, sens_attribute, topk=(1,), num_skin_ty
                 
         return res, res_type0, res_type1, res_type2, res_type3, res_type4, res_type5
 
-def accuracy_by_skin_type_binary(output, target, sens_attribute, topk=(1,)):
+def accuracy_by_skin_type_binary(output, target, sens_attribute, topk=(1,), num_skin_types=2):
     with torch.inference_mode():
         maxk = max(topk)
         batch_size = target.size(0)
@@ -1101,7 +1101,7 @@ def auc_by_skin_type(output, target, sens_attribute, topk=(1,), num_skin_types=6
         return score, type0_score, type1_score, type2_score, type3_score, type4_score, type5_score
 
 
-def auc_by_skin_type_binary(output, target, sens_attribute, topk=(1,)):
+def auc_by_skin_type_binary(output, target, sens_attribute, topk=(1,), num_skin_types=2):
     with torch.inference_mode():
         maxk = max(topk)
         batch_size = target.size(0)
@@ -1139,7 +1139,7 @@ def auc_by_skin_type_binary(output, target, sens_attribute, topk=(1,)):
             type1_score = np.nan
 
         return score, type0_score, type1_score
-        
+
 def accuracy_by_age(output, target, sens_attribute, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k
        for the whole dataset and different age groups separately.

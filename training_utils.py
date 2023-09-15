@@ -179,24 +179,39 @@ def train_one_epoch_fairness(
             )
 
         elif args.sens_attribute == "skin_type":
-
-            ####################################### ACCURACY #########################################
-            acc1, res_type0, res_type1, res_type2, res_type3, res_type4, res_type5 = utils.accuracy_by_skin_type(
-                output, target, sens_attr, topk=(1,), num_skin_types=args.num_skin_types
-            )
             
-            acc1 = acc1[0]
-            acc_type0 = res_type0[0]
-            acc_type1 = res_type1[0]
-            acc_type2 = res_type2[0]
-            acc_type3 = res_type3[0]
-            acc_type4 = res_type4[0]
-            acc_type5 = res_type5[0]
+            if(args.skin_type == 'multi'):
+                ####################################### ACCURACY #########################################
+                acc1, res_type0, res_type1, res_type2, res_type3, res_type4, res_type5 = utils.accuracy_by_skin_type(
+                    output, target, sens_attr, topk=(1,), num_skin_types=args.num_skin_types
+                )
+                
+                acc1 = acc1[0]
+                acc_type0 = res_type0[0]
+                acc_type1 = res_type1[0]
+                acc_type2 = res_type2[0]
+                acc_type3 = res_type3[0]
+                acc_type4 = res_type4[0]
+                acc_type5 = res_type5[0]
 
-            ########################################## AUC ############################################
-            auc, auc_type0, auc_type1, auc_type2, auc_type3, auc_type4, auc_type5 = utils.auc_by_skin_type(
-                output, target, sens_attr, num_skin_types=args.num_skin_types
-            )
+                ########################################## AUC ############################################
+                auc, auc_type0, auc_type1, auc_type2, auc_type3, auc_type4, auc_type5 = utils.auc_by_skin_type(
+                    output, target, sens_attr, num_skin_types=args.num_skin_types
+                )
+            elif(args.skin_type == 'binary'):
+                ####################################### ACCURACY #########################################
+                acc1, res_type0, res_type1 = utils.accuracy_by_skin_type_binary(
+                    output, target, sens_attr, topk=(1,)
+                )
+                
+                acc1 = acc1[0]
+                acc_type0 = res_type0[0]
+                acc_type1 = res_type1[0]
+                
+                ########################################## AUC ############################################
+                auc, auc_type0, auc_type1 = utils.auc_by_skin_type_binary(
+                    output, target, sens_attr
+                )
 
         elif args.sens_attribute == "age":
             if(args.age_type == 'multi'):
@@ -276,78 +291,112 @@ def train_one_epoch_fairness(
 
         elif args.sens_attribute == "skin_type":
             
-            ####################################### ACCURACY #########################################
-            if auc is not np.nan:
-                metric_logger.meters["auc"].update(auc.item(), n=batch_size)
-            else:
-                metric_logger.meters["auc"].update(0.0, n=0)
-            if acc_type0 is not np.nan:
-                metric_logger.meters["acc_type0"].update(acc_type0.item(), n=batch_size)
-            else:
-                metric_logger.meters["acc_type0"].update(0.0, n=0)
+            if(args.skin_type == 'multi'):
+                ####################################### ACCURACY #########################################
+                if auc is not np.nan:
+                    metric_logger.meters["auc"].update(auc.item(), n=batch_size)
+                else:
+                    metric_logger.meters["auc"].update(0.0, n=0)
+                if acc_type0 is not np.nan:
+                    metric_logger.meters["acc_type0"].update(acc_type0.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_type0"].update(0.0, n=0)
 
-            if acc_type1 is not np.nan: 
-                metric_logger.meters["acc_type1"].update(acc_type1.item(), n=batch_size)
-            else:
-                metric_logger.meters["acc_type1"].update(0.0, n=0)
+                if acc_type1 is not np.nan: 
+                    metric_logger.meters["acc_type1"].update(acc_type1.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_type1"].update(0.0, n=0)
+                
+                if acc_type2 is not np.nan:
+                    metric_logger.meters["acc_type2"].update(acc_type2.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_type2"].update(0.0, n=0)
+                
+                if acc_type3 is not np.nan:
+                    metric_logger.meters["acc_type3"].update(acc_type3.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_type3"].update(0.0, n=0)
+
+                if acc_type4 is not np.nan:
+                    metric_logger.meters["acc_type4"].update(acc_type4.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_type4"].update(0.0, n=0)
+                
+                if acc_type5 is not np.nan:
+                    metric_logger.meters["acc_type5"].update(acc_type5.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_type5"].update(0.0, n=0)
+
+
+                ######################################## AUC ############################################
+
+                if auc is not np.nan:
+                    metric_logger.meters["auc"].update(auc, n=batch_size)
+                else:
+                    metric_logger.meters["auc"].update(0.0, n=0)
+
+                if auc_type0 is not np.nan:
+                    metric_logger.meters["auc_type0"].update(acc_type0.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_type0"].update(0.0, n=0)
+
+                if auc_type1 is not np.nan: 
+                    metric_logger.meters["auc_type1"].update(auc_type1.item(), n=batch_size)
+                else:
+                    metric_logger.meters["auc_type1"].update(0.0, n=0)
+                
+                if auc_type2 is not np.nan:
+                    metric_logger.meters["auc_type2"].update(auc_type2.item(), n=batch_size)
+                else:
+                    metric_logger.meters["auc_type2"].update(0.0, n=0)
+                
+                if auc_type3 is not np.nan:
+                    metric_logger.meters["auc_type3"].update(auc_type3.item(), n=batch_size)
+                else:
+                    metric_logger.meters["auc_type3"].update(0.0, n=0)
+
+                if auc_type4 is not np.nan:
+                    metric_logger.meters["auc_type4"].update(auc_type4.item(), n=batch_size)
+                else:
+                    metric_logger.meters["auc_type4"].update(0.0, n=0)
+                
+                if auc_type5 is not np.nan:
+                    metric_logger.meters["auc_type5"].update(auc_type5.item(), n=batch_size)
+                else:
+                    metric_logger.meters["auc_type5"].update(0.0, n=0)
             
-            if acc_type2 is not np.nan:
-                metric_logger.meters["acc_type2"].update(acc_type2.item(), n=batch_size)
-            else:
-                metric_logger.meters["acc_type2"].update(0.0, n=0)
-            
-            if acc_type3 is not np.nan:
-                metric_logger.meters["acc_type3"].update(acc_type3.item(), n=batch_size)
-            else:
-                metric_logger.meters["acc_type3"].update(0.0, n=0)
+            elif(args.skin_type == 'binary'):
+                ####################################### ACCURACY #########################################
+                if auc is not np.nan:
+                    metric_logger.meters["auc"].update(auc.item(), n=batch_size)
+                else:
+                    metric_logger.meters["auc"].update(0.0, n=0)
+                if acc_type0 is not np.nan:
+                    metric_logger.meters["acc_type0"].update(acc_type0.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_type0"].update(0.0, n=0)
 
-            if acc_type4 is not np.nan:
-                metric_logger.meters["acc_type4"].update(acc_type4.item(), n=batch_size)
-            else:
-                metric_logger.meters["acc_type4"].update(0.0, n=0)
-            
-            if acc_type5 is not np.nan:
-                metric_logger.meters["acc_type5"].update(acc_type5.item(), n=batch_size)
-            else:
-                metric_logger.meters["acc_type5"].update(0.0, n=0)
+                if acc_type1 is not np.nan: 
+                    metric_logger.meters["acc_type1"].update(acc_type1.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_type1"].update(0.0, n=0)
 
+                ######################################## AUC ############################################
+                if auc is not np.nan:
+                    metric_logger.meters["auc"].update(auc, n=batch_size)
+                else:
+                    metric_logger.meters["auc"].update(0.0, n=0)
 
-            ######################################## AUC ############################################
+                if auc_type0 is not np.nan:
+                    metric_logger.meters["auc_type0"].update(acc_type0.item(), n=batch_size)
+                else:
+                    metric_logger.meters["acc_type0"].update(0.0, n=0)
 
-            if auc is not np.nan:
-                metric_logger.meters["auc"].update(auc, n=batch_size)
-            else:
-                metric_logger.meters["auc"].update(0.0, n=0)
+                if auc_type1 is not np.nan: 
+                    metric_logger.meters["auc_type1"].update(auc_type1.item(), n=batch_size)
+                else:
+                    metric_logger.meters["auc_type1"].update(0.0, n=0)
 
-            if auc_type0 is not np.nan:
-                metric_logger.meters["auc_type0"].update(acc_type0.item(), n=batch_size)
-            else:
-                metric_logger.meters["acc_type0"].update(0.0, n=0)
-
-            if auc_type1 is not np.nan: 
-                metric_logger.meters["auc_type1"].update(auc_type1.item(), n=batch_size)
-            else:
-                metric_logger.meters["auc_type1"].update(0.0, n=0)
-            
-            if auc_type2 is not np.nan:
-                metric_logger.meters["auc_type2"].update(auc_type2.item(), n=batch_size)
-            else:
-                metric_logger.meters["auc_type2"].update(0.0, n=0)
-            
-            if auc_type3 is not np.nan:
-                metric_logger.meters["auc_type3"].update(auc_type3.item(), n=batch_size)
-            else:
-                metric_logger.meters["auc_type3"].update(0.0, n=0)
-
-            if auc_type4 is not np.nan:
-                metric_logger.meters["auc_type4"].update(auc_type4.item(), n=batch_size)
-            else:
-                metric_logger.meters["auc_type4"].update(0.0, n=0)
-            
-            if auc_type5 is not np.nan:
-                metric_logger.meters["auc_type5"].update(auc_type5.item(), n=batch_size)
-            else:
-                metric_logger.meters["auc_type5"].update(0.0, n=0)
 
         elif args.sens_attribute == "age":
             if(args.age_type == 'multi'):
@@ -1254,7 +1303,7 @@ def evaluate_fairness_skin_type_binary(
             if(auc_type1 != np.nan):
                 metric_logger.meters["auc_type1"].update(auc_type1, n=batch_size)
 
-            metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+            #metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
             metric_logger.meters["auc"].update(auc, n=batch_size)
             metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
             metric_logger.meters["diff_loss"].update(diff_loss, n=batch_size)
@@ -1263,7 +1312,7 @@ def evaluate_fairness_skin_type_binary(
     metric_logger.synchronize_between_processes()
 
     print(
-        f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f} Max Loss {metric_logger.max_val_loss.global_avg:.3f} Diff Loss {metric_logger.diff_loss.global_avg:.3f}"
+        f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f}  Max Loss {metric_logger.max_val_loss.global_avg:.3f} Diff Loss {metric_logger.diff_loss.global_avg:.3f}"
     )
 
     # Accuracy
