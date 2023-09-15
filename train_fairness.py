@@ -31,29 +31,55 @@ def create_results_df(args):
     test_results_df = None
     
     if(args.sens_attribute == 'gender'):
-        test_results_df = pd.DataFrame(
-                columns=[
-                    "Tuning Method",
-                    "Train Percent",
-                    "LR",
-                    "Test Acc Overall",
-                    "Test Acc Male",
-                    "Test Acc Female",
-                    "Test Acc Difference",
-                ]
-            )  
+        if(args.use_metric == 'acc'):
+            test_results_df = pd.DataFrame(
+                    columns=[
+                        "Tuning Method",
+                        "Train Percent",
+                        "LR",
+                        "Test Acc Overall",
+                        "Test Acc Male",
+                        "Test Acc Female",
+                        "Test Acc Difference",
+                    ]
+                )  
+        elif(args.use_metric == 'auc'):
+            test_results_df = pd.DataFrame(
+                    columns=[
+                        "Tuning Method",
+                        "Train Percent",
+                        "LR",
+                        "Test AUC Overall",
+                        "Test AUC Male",
+                        "Test AUC Female",
+                        "Test AUC Difference",
+                    ]
+                ) 
     elif(args.sens_attribute == 'skin_type' or args.sens_attribute == 'age'):
-        test_results_df = pd.DataFrame(
-                columns=[
-                    "Tuning Method",
-                    "Train Percent",
-                    "LR",
-                    "Test Acc Overall",
-                    "Test Acc (Best)",
-                    "Test Acc (Worst)",
-                    "Test Acc Difference",
-                ]
-            )  
+        if(args.use_metric == 'acc'):
+            test_results_df = pd.DataFrame(
+                    columns=[
+                        "Tuning Method",
+                        "Train Percent",
+                        "LR",
+                        "Test Acc Overall",
+                        "Test Acc (Best)",
+                        "Test Acc (Worst)",
+                        "Test Acc Difference",
+                    ]
+                )  
+        elif(args.use_metric == 'auc'):
+            test_results_df = pd.DataFrame(
+                    columns=[
+                        "Tuning Method",
+                        "Train Percent",
+                        "LR",
+                        "Test AUC Overall",
+                        "Test AUC (Best)",
+                        "Test AUC (Worst)",
+                        "Test AUC Difference",
+                    ]
+                ) 
     else:
         raise NotImplementedError
 
@@ -237,6 +263,7 @@ def main(args):
 
     print("Creating model")
 
+    #args.num_classes = 2
     model = utils.get_timm_model(args.model, num_classes=args.num_classes)
     base_model = model
 
@@ -429,6 +456,9 @@ def main(args):
                     val_acc,
                     val_male_acc,
                     val_female_acc,
+                    val_auc,
+                    val_male_auc,
+                    val_female_auc,
                     val_loss,
                     val_max_loss,
                 ) = evaluate_fairness_gender(
@@ -448,6 +478,13 @@ def main(args):
                         val_max_loss,
                     )
                 )
+                print(
+                    "Val AUC: {:.2f}, Val Male AUC {:.2f}, Val Female AUC {:.2f}".format(
+                        val_auc,
+                        val_male_auc,
+                        val_female_auc,
+                    )
+                )
             elif args.sens_attribute == "skin_type":
 
                 # if(epoch == args.epochs-1):
@@ -463,6 +500,13 @@ def main(args):
                     val_acc_type3,
                     val_acc_type4,
                     val_acc_type5,
+                    val_auc,
+                    val_auc_type0,
+                    val_auc_type1,
+                    val_auc_type2,
+                    val_auc_type3,
+                    val_auc_type4,
+                    val_auc_type5,
                     val_loss,
                     val_max_loss,
                 ) = evaluate_fairness_skin_type(
@@ -487,6 +531,17 @@ def main(args):
                         val_max_loss,
                     )
                 )
+                print(
+                    "Val AUC: {:.2f}, Val Type 0 AUC: {:.2f}, Val Type 1 AUC: {:.2f}, Val Type 2 AUC: {:.2f}, Val Type 3 AUC: {:.2f}, Val Type 4 AUC: {:.2f}, Val Type 5 AUC: {:.2f}".format(
+                        val_auc,
+                        val_auc_type0,
+                        val_auc_type1,
+                        val_auc_type2,
+                        val_auc_type3,
+                        val_auc_type4,
+                        val_auc_type5,
+                    )
+                )
             elif args.sens_attribute == "age":
                 if(args.age_type == 'multi'):
                     (
@@ -496,6 +551,12 @@ def main(args):
                         acc_age2_avg,
                         acc_age3_avg,
                         acc_age4_avg,
+                        val_auc,
+                        auc_age0_avg,
+                        auc_age1_avg,
+                        auc_age2_avg,
+                        auc_age3_avg,
+                        auc_age4_avg,
                         val_loss,
                         val_max_loss,
                     ) = evaluate_fairness_age(
@@ -518,11 +579,25 @@ def main(args):
                             val_max_loss,
                         )
                     )
+                    print(
+                        "Val AUC: {:.2f}, Val Age Group0 AUC: {:.2f}, Val Age Group1 AUC: {:.2f}, Val Age Group2 AUC: {:.2f}, Val Age Group3 AUC: {:.2f}, Val Age Group4 AUC: {:.2f}".format(
+                            val_auc,
+                            auc_age0_avg,
+                            auc_age1_avg,
+                            auc_age2_avg,
+                            auc_age3_avg,
+                            auc_age4_avg,
+                        )
+                    )
+                    
                 elif(args.age_type == 'binary'):
                     (
                         val_acc,
                         acc_age0_avg,
                         acc_age1_avg,
+                        val_auc,
+                        auc_age0_avg,
+                        auc_age1_avg,
                         val_loss,
                         val_max_loss,
                     ) = evaluate_fairness_age_binary(
@@ -540,6 +615,13 @@ def main(args):
                             acc_age1_avg,
                             torch.mean(val_loss),
                             val_max_loss,
+                        )
+                    )
+                    print(
+                        "Val AUC: {:.2f}, Val Age Group0 AUC: {:.2f}, Val Age Group1 AUC: {:.2f}".format(
+                            val_auc,
+                            auc_age0_avg,
+                            auc_age1_avg,
                         )
                     )
                 else:
@@ -588,68 +670,132 @@ def main(args):
         # Here we are adding results on the validation set
         if args.masking_vector_idx is not None:
             if(args.sens_attribute == 'gender'):
-                new_row = [
-                    args.tuning_method,
-                    trainable_percentage,
-                    args.lr,
-                    val_acc,
-                    val_male_acc,
-                    val_female_acc,
-                    round(abs(val_male_acc - val_female_acc), 3),
-                    #mask_filename,
-                ]
+                if(args.use_metric == 'acc'):
+                    new_row = [
+                        args.tuning_method,
+                        trainable_percentage,
+                        args.lr,
+                        val_acc,
+                        val_male_acc,
+                        val_female_acc,
+                        round(abs(val_male_acc - val_female_acc), 3),
+                        #mask_filename,
+                    ]
+                elif(args.use_metric == 'auc'):
+                    new_row = [
+                        args.tuning_method,
+                        trainable_percentage,
+                        args.lr,
+                        val_auc,
+                        val_male_auc,
+                        val_female_auc,
+                        round(abs(val_male_auc - val_female_auc), 3),
+                        #mask_filename,
+                    ]
             elif(args.sens_attribute == 'skin_type'):
 
                 best_acc = max(val_acc_type0, val_acc_type1, val_acc_type2, val_acc_type3, val_acc_type4, val_acc_type5)
                 worst_acc = min(val_acc_type0, val_acc_type1, val_acc_type2, val_acc_type3, val_acc_type4, val_acc_type5)
 
-                new_row = [
-                    args.tuning_method,
-                    trainable_percentage,
-                    args.lr,
-                    val_acc,
-                    best_acc,
-                    worst_acc,
-                    round(abs(best_acc - worst_acc), 3),
-                    #mask_filename,
-                ]
+                best_auc = max(val_auc_type0, val_auc_type1, val_auc_type2, val_auc_type3, val_auc_type4, val_auc_type5)
+                worst_auc = min(val_auc_type0, val_auc_type1, val_auc_type2, val_auc_type3, val_auc_type4, val_auc_type5)
+
+                if(args.use_metric == 'acc'):
+                    new_row = [
+                        args.tuning_method,
+                        trainable_percentage,
+                        args.lr,
+                        val_acc,
+                        best_acc,
+                        worst_acc,
+                        round(abs(best_acc - worst_acc), 3),
+                        #mask_filename,
+                    ]
+                elif(args.use_metric == 'auc'):
+                    new_row = [
+                        args.tuning_method,
+                        trainable_percentage,
+                        args.lr,
+                        val_auc,
+                        best_auc,
+                        worst_auc,
+                        round(abs(best_auc - worst_auc), 3),
+                        #mask_filename,
+                    ]
             elif(args.sens_attribute == 'age'):
                 if(args.age_type == 'multi'):
                     best_acc = max(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
                     worst_acc = min(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
+
+                    best_auc = max(auc_age0_avg, auc_age1_avg, auc_age2_avg, auc_age3_avg, auc_age4_avg)
+                    worst_auc = min(auc_age0_avg, auc_age1_avg, auc_age2_avg, auc_age3_avg, auc_age4_avg)
+
                 elif(args.age_type == 'binary'):
                     best_acc = max(acc_age0_avg, acc_age1_avg)
                     worst_acc = min(acc_age0_avg, acc_age1_avg)
+
+                    best_auc = max(auc_age0_avg, auc_age1_avg)
+                    worst_auc = min(auc_age0_avg, auc_age1_avg)
                 else:
                     raise NotImplementedError("Age type not implemented")
 
+                if(args.use_metric == 'acc'):
+                    new_row = [
+                        args.tuning_method,
+                        trainable_percentage,
+                        args.lr,
+                        val_acc,
+                        best_acc,
+                        worst_acc,
+                        round(abs(best_acc - worst_acc), 3),
+                        #mask_filename,
+                    ]
+                elif(args.use_metric == 'auc'):
+                    new_row = [
+                        args.tuning_method,
+                        trainable_percentage,
+                        args.lr,
+                        val_auc,
+                        best_auc,
+                        worst_auc,
+                        round(abs(best_auc - worst_auc), 3),
+                        #mask_filename,
+                    ]
+
+        elif args.masking_vector is not None or args.subnetwork_mask_name is not None:
+            if(args.use_metric == 'acc'):
+                new_row = [
+                    "Subnetwork_" + args.tuning_method,
+                    trainable_percentage,
+                    args.lr,
+                    val_acc,
+                    #convert_numpy_array_to_string(mask),
+                ]
+            elif(args.use_metric == 'auc'):
+                new_row = [
+                    "Subnetwork_" + args.tuning_method,
+                    trainable_percentage,
+                    args.lr,
+                    val_auc,
+                    #convert_numpy_array_to_string(mask),
+                ]
+        else:
+            if(args.use_metric == 'acc'):
                 new_row = [
                     args.tuning_method,
                     trainable_percentage,
                     args.lr,
                     val_acc,
-                    best_acc,
-                    worst_acc,
-                    round(abs(best_acc - worst_acc), 3),
-                    #mask_filename,
+                    #os.path.join(args.vector_savepath, filename),
                 ]
-
-        elif args.masking_vector is not None or args.subnetwork_mask_name is not None:
-            new_row = [
-                "Subnetwork_" + args.tuning_method,
-                trainable_percentage,
-                args.lr,
-                val_acc,
-                #convert_numpy_array_to_string(mask),
-            ]
-        else:
-            new_row = [
-                args.tuning_method,
-                trainable_percentage,
-                args.lr,
-                val_acc,
-                #os.path.join(args.vector_savepath, filename),
-            ]
+            elif(args.use_metric == 'auc'):
+                new_row = [
+                    args.tuning_method,
+                    trainable_percentage,
+                    args.lr,
+                    val_auc,
+                    #os.path.join(args.vector_savepath, filename),
+                ]
 
         # results_df.loc[len(results_df)] = new_row
         # results_df.to_csv(os.path.join(args.output_dir, args.results_df), index=False)
@@ -670,6 +816,9 @@ def main(args):
                 test_acc,
                 test_male_acc,
                 test_female_acc,
+                test_auc,
+                test_male_auc,
+                test_female_auc,
                 test_loss,
                 test_max_loss,
             ) = evaluate_fairness_gender(
@@ -681,8 +830,14 @@ def main(args):
                 device=device,
             )
             print("\n")
+            print("Overall Test Accuracy: ", test_acc)
             print("Test Male Accuracy: ", test_male_acc)
             print("Test Female Accuracy: ", test_female_acc)
+            print("\n")
+            print("Overall Test AUC: ", test_auc)
+            print("Test Male AUC: ", test_male_auc)
+            print("Test Female AUC: ", test_female_auc)
+
         elif args.sens_attribute == "skin_type":
             (
                 test_acc,
@@ -692,6 +847,13 @@ def main(args):
                 test_acc_type3,
                 test_acc_type4,
                 test_acc_type5,
+                test_auc,
+                test_auc_type0,
+                test_auc_type1,
+                test_auc_type2,
+                test_auc_type3,
+                test_auc_type4,
+                test_auc_type5,
                 test_loss,
                 test_max_loss,
             ) = evaluate_fairness_skin_type(
@@ -704,12 +866,21 @@ def main(args):
                 get_auc=True,
             )
             print("\n")
+            print("Overall Test accuracy: ", test_acc)
             print("Test Type 0 Accuracy: ", test_acc_type0)
             print("Test Type 1 Accuracy: ", test_acc_type1)
             print("Test Type 2 Accuracy: ", test_acc_type2)
             print("Test Type 3 Accuracy: ", test_acc_type3)
             print("Test Type 4 Accuracy: ", test_acc_type4)
             print("Test Type 5 Accuracy: ", test_acc_type5)
+            print("\n")
+            print("Overall Test AUC: ", test_auc)
+            print("Test Type 0 AUC: ", test_auc_type0)
+            print("Test Type 1 AUC: ", test_auc_type1)
+            print("Test Type 2 AUC: ", test_auc_type2)
+            print("Test Type 3 AUC: ", test_auc_type3)
+            print("Test Type 4 AUC: ", test_auc_type4)
+            print("Test Type 5 AUC: ", test_auc_type5)
 
         elif(args.sens_attribute == 'age'):
             if(args.age_type == 'multi'):
@@ -720,6 +891,12 @@ def main(args):
                     test_acc_type2,
                     test_acc_type3,
                     test_acc_type4,
+                    test_auc,
+                    test_auc_type0,
+                    test_auc_type1,
+                    test_auc_type2,
+                    test_auc_type3,
+                    test_auc_type4,
                     test_loss,
                     test_max_loss,
                 ) = evaluate_fairness_age(
@@ -731,17 +908,28 @@ def main(args):
                     device=device,
                 )
                 print("\n")
-                print("Test Overall accuracy: ", test_acc)
+                print("Overall Test  accuracy: ", test_acc)
                 print("Test Age Group 0 Accuracy: ", test_acc_type0)
                 print("Test Age Group 1 Accuracy: ", test_acc_type1)
                 print("Test Age Group 2 Accuracy: ", test_acc_type2)
                 print("Test Age Group 3 Accuracy: ", test_acc_type3)
                 print("Test Age Group 4 Accuracy: ", test_acc_type4)
+                print("\n")
+                print("Overall Test AUC: ", test_auc)
+                print("Test Age Group 0 AUC: ", test_auc_type0)
+                print("Test Age Group 1 AUC: ", test_auc_type1)
+                print("Test Age Group 2 AUC: ", test_auc_type2)
+                print("Test Age Group 3 AUC: ", test_auc_type3)
+                print("Test Age Group 4 AUC: ", test_auc_type4)
+
             elif(args.age_type == 'binary'):
                 (
                     test_acc,
                     test_acc_type0,
                     test_acc_type1,
+                    test_auc,
+                    test_auc_type0,
+                    test_auc_type1,
                     test_loss,
                     test_max_loss,
                 ) = evaluate_fairness_age_binary(
@@ -753,9 +941,14 @@ def main(args):
                     device=device,
                 )
                 print("\n")
-                print("Test Overall accuracy: ", test_acc)
+                print("Overall Test accuracy: ", test_acc)
                 print("Test Age Group 0 Accuracy: ", test_acc_type0)
                 print("Test Age Group 1 Accuracy: ", test_acc_type1)
+                print("\n")
+                print("Overall Test AUC: ", test_auc)
+                print("Test Age Group 0 AUC: ", test_auc_type0)
+                print("Test Age Group 1 AUC: ", test_auc_type1)
+
             else:
                 raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
         else:
@@ -770,18 +963,32 @@ def main(args):
         # Here we are adding results on the test set
         if args.masking_vector_idx is not None:
             if(args.sens_attribute == 'gender'):
-                new_row2 = [args.tuning_method, round(trainable_percentage, 3), np.nan, args.lr, np.nan, test_acc, test_male_acc, test_female_acc, round(abs(test_male_acc - test_female_acc), 3), mask_filename]
+                if(args.use_metric == 'acc'):
+                    new_row2 = [args.tuning_method, round(trainable_percentage, 3), np.nan, args.lr, np.nan, test_acc, test_male_acc, test_female_acc, round(abs(test_male_acc - test_female_acc), 3), mask_filename]
+                elif(args.use_metric == 'auc'):
+                    new_row2 = [args.tuning_method, round(trainable_percentage, 3), np.nan, args.lr, np.nan, test_auc, test_male_auc, test_female_auc, round(abs(test_male_auc - test_female_auc), 3), mask_filename]
             else:
                 if(args.sens_attribute == 'skin_type'):
                     best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
                     worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_acc_type5)
+
+                    best_auc = max(test_auc_type0, test_auc_type1, test_auc_type2, test_auc_type3, test_auc_type4, test_auc_type5)
+                    worst_auc = min(test_auc_type0, test_auc_type1, test_auc_type2, test_auc_type3, test_auc_type4, test_auc_type5)
+
                 elif(args.sens_attribute == 'age'):
                     if(args.age_type == 'multi'):
                         best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4)
                         worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4)
+
+                        best_auc = max(test_auc_type0, test_auc_type1, test_auc_type2, test_auc_type3, test_auc_type4)
+                        worst_auc = min(test_auc_type0, test_auc_type1, test_auc_type2, test_auc_type3, test_auc_type4)
+
                     elif(args.age_type == 'binary'):
                         best_acc = max(test_acc_type0, test_acc_type1)
                         worst_acc = min(test_acc_type0, test_acc_type1)
+
+                        best_auc = max(test_auc_type0, test_auc_type1)
+                        worst_auc = min(test_auc_type0, test_auc_type1)
                     else:
                         raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
                         
@@ -797,15 +1004,26 @@ def main(args):
                 #     round(abs(best_acc - worst_acc), 3),
                 #     mask_filename,
                 # ]
-                new_row2 = [
-                    args.tuning_method,
-                    round(trainable_percentage, 3),
-                    args.lr,
-                    test_acc,
-                    best_acc,
-                    worst_acc,
-                    round(abs(best_acc - worst_acc), 3),
-                ]
+                if(args.use_metric == 'acc'):
+                    new_row2 = [
+                        args.tuning_method,
+                        round(trainable_percentage, 3),
+                        args.lr,
+                        test_acc,
+                        best_acc,
+                        worst_acc,
+                        round(abs(best_acc - worst_acc), 3),
+                    ]
+                elif(args.use_metric == 'auc'):
+                    new_row2 = [
+                        args.tuning_method,
+                        round(trainable_percentage, 3),
+                        args.lr,
+                        test_auc,
+                        best_auc,
+                        worst_auc,
+                        round(abs(best_auc - worst_auc), 3),
+                    ]
             
         elif args.masking_vector is not None or args.subnetwork_mask_name is not None:
             # new_row2 = [
@@ -820,15 +1038,26 @@ def main(args):
             #     round(abs(test_male_acc - test_female_acc), 3),
             #     convert_numpy_array_to_string(mask),
             # ]
-            new_row2 = [
-                "Subnetwork_" + args.tuning_method,
-                round(trainable_percentage, 3),
-                args.lr,
-                test_acc,
-                test_male_acc,
-                test_female_acc,
-                round(abs(test_male_acc - test_female_acc), 3),
-            ]
+            if(args.use_metric == 'acc'):
+                new_row2 = [
+                    "Subnetwork_" + args.tuning_method,
+                    round(trainable_percentage, 3),
+                    args.lr,
+                    test_acc,
+                    test_male_acc,
+                    test_female_acc,
+                    round(abs(test_male_acc - test_female_acc), 3),
+                ]
+            elif(args.use_metric == 'auc'):
+                new_row2 = [
+                    "Subnetwork_" + args.tuning_method,
+                    round(trainable_percentage, 3),
+                    args.lr,
+                    test_auc,
+                    test_male_auc,
+                    test_female_auc,
+                    round(abs(test_male_auc - test_female_auc), 3),
+                ]
             
         test_results_df.loc[len(test_results_df)] = new_row2
 
@@ -864,8 +1093,11 @@ if __name__ == "__main__":
     #     + args.model
     #     + ".csv"
     # )
-    args.test_results_df = "Fairness_Optuna_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + "_" + args.objective_metric + ".csv"
 
+    if(args.use_metric == 'acc'):
+        args.test_results_df = "Fairness_Optuna_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + "_" + args.objective_metric + ".csv"
+    elif(args.use_metric == 'auc'):
+        args.test_results_df = "AUC_Fairness_Optuna_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + "_" + args.objective_metric + ".csv"
     current_wd = os.getcwd()
     args.vector_savepath = os.path.join(
         current_wd,
