@@ -178,6 +178,12 @@ def train_one_epoch_fairness(
                 output, target, sens_attr, topk=(1, args.num_classes)
             )
 
+            # best_acc = max(acc_male, acc_female)
+            # worst_acc = min(acc_male, acc_female)
+
+            # best_auc = max(auc_male, auc_female)
+            # worst_auc = min(auc_male, auc_female)
+
         elif args.sens_attribute == "skin_type":
             
             if(args.skin_type == 'multi'):
@@ -493,6 +499,41 @@ def train_one_epoch_fairness(
                 raise NotImplementedError("Age type not implemented")
 
         metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
+
+
+        if(args.sens_attribute == 'gender'):
+            best_acc_avg = max(metric_logger.acc1_male.global_avg, metric_logger.acc1_female.global_avg)
+            worst_acc_avg = min(metric_logger.acc1_male.global_avg, metric_logger.acc1_female.global_avg)
+            best_auc_avg = max(metric_logger.auc_male.global_avg, metric_logger.auc_female.global_avg)
+            worst_auc_avg = min(metric_logger.auc_male.global_avg, metric_logger.auc_female.global_avg)
+
+        elif(args.sens_attribute == 'skin_type'):
+            if(args.skin_type == 'binary'):
+                best_acc_avg = max(metric_logger.acc_type0.global_avg, metric_logger.acc_type1.global_avg)
+                worst_acc_avg = min(metric_logger.acc_type0.global_avg, metric_logger.acc_type1.global_avg)
+                best_auc_avg = max(metric_logger.auc_type0.global_avg, metric_logger.auc_type1.global_avg)
+                worst_auc_avg = min(metric_logger.auc_type0.global_avg, metric_logger.auc_type1.global_avg)
+            elif(args.skin_type == 'multi'):
+                best_acc_avg = max(metric_logger.acc_type0.global_avg, metric_logger.acc_type1.global_avg, metric_logger.acc_type2.global_avg, metric_logger.acc_type3.global_avg, metric_logger.acc_type4.global_avg, metric_logger.acc_type5.global_avg)
+                worst_acc_avg = min(metric_logger.acc_type0.global_avg, metric_logger.acc_type1.global_avg, metric_logger.acc_type2.global_avg, metric_logger.acc_type3.global_avg, metric_logger.acc_type4.global_avg, metric_logger.acc_type5.global_avg)
+                best_auc_avg = max(metric_logger.auc_type0.global_avg, metric_logger.auc_type1.global_avg, metric_logger.auc_type2.global_avg, metric_logger.auc_type3.global_avg, metric_logger.auc_type4.global_avg, metric_logger.auc_type5.global_avg)
+                worst_auc_avg = min(metric_logger.auc_type0.global_avg, metric_logger.auc_type1.global_avg, metric_logger.auc_type2.global_avg, metric_logger.auc_type3.global_avg, metric_logger.auc_type4.global_avg, metric_logger.auc_type5.global_avg)
+        elif(args.sens_attribute == 'age'):
+            if(args.age_type == 'binary'):
+                best_acc_avg = max(metric_logger.acc_Age0.global_avg, metric_logger.acc_Age1.global_avg)
+                worst_acc_avg = min(metric_logger.acc_Age0.global_avg, metric_logger.acc_Age1.global_avg)
+                best_auc_avg = max(metric_logger.auc_Age0.global_avg, metric_logger.auc_Age1.global_avg)
+                worst_auc_avg = min(metric_logger.auc_Age0.global_avg, metric_logger.auc_Age1.global_avg)
+            elif(args.age_type == 'multi'):
+                best_acc_avg = max(metric_logger.acc_Age0.global_avg, metric_logger.acc_Age1.global_avg, metric_logger.acc_Age2.global_avg, metric_logger.acc_Age3.global_avg, metric_logger.acc_Age4.global_avg)
+                worst_acc_avg = min(metric_logger.acc_Age0.global_avg, metric_logger.acc_Age1.global_avg, metric_logger.acc_Age2.global_avg, metric_logger.acc_Age3.global_avg, metric_logger.acc_Age4.global_avg)
+                best_auc_avg = max(metric_logger.auc_Age0.global_avg, metric_logger.auc_Age1.global_avg, metric_logger.auc_Age2.global_avg, metric_logger.auc_Age3.global_avg, metric_logger.auc_Age4.global_avg)
+                worst_auc_avg = min(metric_logger.auc_Age0.global_avg, metric_logger.auc_Age1.global_avg, metric_logger.auc_Age2.global_avg, metric_logger.auc_Age3.global_avg, metric_logger.auc_Age4.global_avg)
+
+        acc_avg = metric_logger.acc1.global_avg
+        auc_avg = metric_logger.auc.global_avg
+
+    return acc_avg, best_acc_avg, worst_acc_avg, auc_avg, best_auc_avg, worst_auc_avg
 
 def get_attn_params(model):
     attn_params = []

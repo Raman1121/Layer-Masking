@@ -18,6 +18,7 @@ class HAM10000Dataset(Dataset):
         self.transform = transform
         self.sens_attribute = sens_attribute
         self.age_type = age_type
+        #self.use_binary_label = use_binary_label
         self.classes = self.get_num_classes()
         self.class_to_idx = self._get_class_to_idx()
 
@@ -25,7 +26,8 @@ class HAM10000Dataset(Dataset):
         return len(self.df)
     
     def get_num_classes(self):
-        return self.df['dx_index'].unique()
+        #return self.df['dx_index'].unique()
+        return self.df['binaryLabel'].unique()
 
     def _get_original_labels(self):
         return {'akiec':"Bowen's disease",
@@ -48,8 +50,8 @@ class HAM10000Dataset(Dataset):
     def __getitem__(self, idx):
         image = read_image(self.df.iloc[idx]['Path'], mode=ImageReadMode.RGB)
         image = T.ToPILImage()(image)
-        label = torch.tensor(self.df.iloc[idx]['dx_index'])
-        #label = torch.tensor(self.df.iloc[idx]['binaryLabel'])
+        #label = torch.tensor(self.df.iloc[idx]['dx_index'])
+        label = torch.tensor(self.df.iloc[idx]['binaryLabel'])
 
         #print("LABEL: ", label)
 

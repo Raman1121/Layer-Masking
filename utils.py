@@ -288,6 +288,89 @@ def get_model_bitfit_random(model):
 
     return vector
 
+def auto_peft1(model, mask):
+
+    vector = []
+
+    for i in range(len(mask)):
+        block_idx = i//3
+        bit_idx = i%3
+
+        bit = mask[i]
+        vector.append(bit)
+
+        # print("Bit: {} | Block {} | Bit Idx {}".format(bit, block_idx, bit_idx))
+
+        '''
+            bit_idx = 0 for norm layers
+            bit_idx = 1 for attn layers
+            bit_idx = 2 for mlp layers
+        '''
+        if(bit == 1):
+            if(bit_idx == 0):
+                enable_module(model.blocks[block_idx].norm1)
+                enable_module(model.blocks[block_idx].norm2)
+            if(bit_idx == 1):
+                enable_module(model.blocks[block_idx].attn)
+            if(bit_idx == 2):
+                enable_module(model.blocks[block_idx].mlp)
+
+        if(bit == 0):
+            if(bit_idx == 0):
+                disable_module(model.blocks[block_idx].norm1)
+                disable_module(model.blocks[block_idx].norm2)
+            if(bit_idx == 1):
+                disable_module(model.blocks[block_idx].attn)
+            if(bit_idx == 2):
+                disable_module(model.blocks[block_idx].mlp)    
+
+    return vector
+
+
+def auto_peft2(model, mask):
+
+    vector = []
+
+    for i in range(len(mask)):
+        block_idx = i//4
+        bit_idx = i%4
+
+        bit = mask[i]
+
+        vector.append(bit)
+
+        # print("Bit: {} | Block {} | Bit Idx {}".format(bit, block_idx, bit_idx))
+
+        '''
+            bit_idx = 0 for norm1 layer
+            bit_idx = 1 for attn layers
+            bit_idx = 2 for norm2 layer
+            bit_idx = 3 for mlp layers
+        '''
+
+        if(bit == 1):
+            if(bit_idx == 0):
+                enable_module(model.blocks[block_idx].norm1)
+            if(bit_idx == 1):
+                enable_module(model.blocks[block_idx].attn)
+            if(bit_idx == 2):
+                enable_module(model.blocks[block_idx].norm2)
+            if(bit_idx == 3):
+                enable_module(model.blocks[block_idx].mlp)
+
+        if(bit == 0):
+            if(bit_idx == 0):
+                disable_module(model.blocks[block_idx].norm1)
+            if(bit_idx == 1):
+                disable_module(model.blocks[block_idx].attn)
+            if(bit_idx == 2):
+                disable_module(model.blocks[block_idx].norm2)
+            if(bit_idx == 3):
+                disable_module(model.blocks[block_idx].mlp)
+
+    return vector
+
+
 
 def create_lora_model(
     model,
@@ -407,6 +490,12 @@ def get_masked_model(model, method, **kwargs):
     elif method == "tune_full_block":
         disable_module(model)
         vector = tune_blocks_random(model, kwargs["mask"], segment="full")
+    elif method == 'auto_peft1':
+        disable_module(model)
+        vector = auto_peft1(model, kwargs["mask"])
+    elif method == 'auto_peft2':
+        disable_module(model)
+        vector = auto_peft2(model, kwargs["mask"])
     else:
         raise NotImplementedError
 
@@ -868,7 +957,7 @@ def auc_by_gender(output, target, sens_attribute, topk=(1,)):
         try:
             score = sklm.roc_auc_score(target, output_with_softmax, multi_class='ovr')
         except:
-            import pdb; pdb.set_trace()
+            #import pdb; pdb.set_trace()
             score = np.nan
 
         try:
@@ -1114,10 +1203,14 @@ def auc_by_skin_type_binary(output, target, sens_attribute, topk=(1,), num_skin_
         output_with_softmax = torch.softmax(output, dim=1).cpu().detach().data.numpy()
         target = target.cpu().detach().data
 
+        if(output_with_softmax.shape[1] == 2):
+            output_with_softmax = output_with_softmax[:, 1]
+
         # Calculate auc for the whole dataset
         try:
             score = sklm.roc_auc_score(target, output_with_softmax, multi_class='ovr')
         except:
+            #import pdb; pdb.set_trace()
             score = np.nan
                 
         # Calculate AUC for the each skin type

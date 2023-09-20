@@ -94,6 +94,146 @@ def create_results_df(args):
     return test_results_df
 
 
+
+def plot_auc(args, AUC_list, best_AUC_list, worst_AUC_list, is_train):
+
+    assert is_train is not None
+
+    ALL_AUC = []
+    ALL_BEST_AUC = []
+    ALL_WORST_AUC = []
+
+    print(AUC_list)
+    print(best_AUC_list)
+    print(worst_AUC_list)
+
+    # Handling nan values, replacing them with previous values
+    for i in range(len(AUC_list)):
+        if(np.isnan(AUC_list[i])):
+            ALL_AUC.append(AUC_list[i-1])
+        else:
+            ALL_AUC.append(AUC_list[i])
+        
+    for i in range(len(best_AUC_list)):
+        if(np.isnan(best_AUC_list[i])):
+            ALL_BEST_AUC.append(best_AUC_list[i-1])
+        else:
+            ALL_BEST_AUC.append(best_AUC_list[i])
+        
+    for i in range(len(worst_AUC_list)):
+        if(np.isnan(worst_AUC_list[i])):
+            ALL_WORST_AUC.append(worst_AUC_list[i-1])
+        else:
+            ALL_WORST_AUC.append(worst_AUC_list[i])
+
+    # List for AUC Difference
+    ALL_AUC_DIFF = []
+    for i in range(len(ALL_AUC)):
+        ALL_AUC_DIFF.append(ALL_BEST_AUC[i] - ALL_WORST_AUC[i])
+
+    if(is_train):
+        figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'training.png'
+        label1 = 'Train AUC'
+        label2 = 'Train Best AUC'
+        label3 = 'Train Worst AUC'
+        title = 'Overall, Best and Worst Sub-group Training AUC'
+    else:
+        figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'validation.png'
+        label1 = 'Val AUC'
+        label2 = 'Val Best AUC'
+        label3 = 'Val Worst AUC'
+        title = 'Overall, Best and Worst Sub-group Validation AUC'
+
+    # Plot the validation AUC, best and worst AUC in the same figure as a line plot
+    plt.figure(figsize=(10, 10))
+    plt.plot(ALL_AUC, label=label1)
+    plt.plot(ALL_BEST_AUC, label=label2)
+    plt.plot(ALL_WORST_AUC, label=label3)
+    plt.plot(ALL_AUC_DIFF, label='AUC Difference')
+    plt.xlabel('Epochs')
+    plt.ylabel('AUC')
+    plt.title(title)
+    plt.xticks(list(range(len(ALL_WORST_AUC))))
+    plt.legend()
+    plt.savefig(os.path.join(args.fig_savepath, figname))
+
+    if(is_train):
+        print("Training AUC Plot saved at: ", os.path.join(args.fig_savepath, figname))
+    else:
+        print("Validation AUC Plot saved at: ", os.path.join(args.fig_savepath, figname))
+
+    plt.close()
+
+
+def plot_acc(args, ACC_list, best_ACC_list, worst_ACC_list, is_train):
+
+    assert is_train is not None
+
+    ALL_ACC = []
+    ALL_BEST_ACC = []
+    ALL_WORST_ACC = []
+
+    print(ACC_list)
+    print(best_ACC_list)
+    print(worst_ACC_list)
+
+    # Handling nan values, replacing them with previous values
+    for i in range(len(ACC_list)):
+        if(np.isnan(ACC_list[i])):
+            ALL_ACC.append(ACC_list[i-1])
+        else:
+            ALL_ACC.append(ACC_list[i])
+        
+    for i in range(len(best_ACC_list)):
+        if(np.isnan(best_ACC_list[i])):
+            ALL_BEST_ACC.append(best_ACC_list[i-1])
+        else:
+            ALL_BEST_ACC.append(best_ACC_list[i])
+        
+    for i in range(len(worst_ACC_list)):
+        if(np.isnan(worst_ACC_list[i])):
+            ALL_WORST_ACC.append(worst_ACC_list[i-1])
+        else:
+            ALL_WORST_ACC.append(worst_ACC_list[i])
+
+    # List for ACC Difference
+    ALL_ACC_DIFF = []
+    for i in range(len(ALL_ACC)):
+        ALL_ACC_DIFF.append(ALL_BEST_ACC[i] - ALL_WORST_ACC[i])
+
+    if(is_train):
+        figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'training.png'
+        label1 = 'Train ACC'
+        label2 = 'Train Best ACC'
+        label3 = 'Train Worst ACC'
+        title = 'Overall, Best and Worst Sub-group Training ACC'
+    else:
+        figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'validation.png'
+        label1 = 'Val ACC'
+        label2 = 'Val Best ACC'
+        label3 = 'Val Worst ACC'
+        title = 'Overall, Best and Worst Sub-group Validation ACC'
+
+    # Plot the validation ACC, best and worst ACC in the same figure as a line plot
+    plt.figure(figsize=(12, 16))
+    plt.plot(ALL_ACC, label=label1)
+    plt.plot(ALL_BEST_ACC, label=label2)
+    plt.plot(ALL_WORST_ACC, label=label3)
+    plt.plot(ALL_ACC_DIFF, label='ACC Difference')
+    plt.xlabel('Epochs')
+    plt.ylabel('ACC')
+    plt.title(title)
+    plt.xticks(list(range(len(ALL_WORST_ACC))))
+    plt.legend()
+    plt.savefig(os.path.join(args.fig_savepath, figname))
+
+    if(is_train):
+        print("Training ACC Plot saved at: ", os.path.join(args.fig_savepath, figname))
+    else:
+        print("Validation ACC Plot saved at: ", os.path.join(args.fig_savepath, figname))
+
+    plt.close()
+
 def main(args):
     assert args.sens_attribute is not None, "Sensitive attribute not provided"
     
@@ -103,6 +243,9 @@ def main(args):
     if args.output_dir:
         utils.mkdir(args.output_dir)
         utils.mkdir(os.path.join(args.output_dir, "checkpoints"))
+
+    if("auc" in args.objective_metric):
+        args.use_metric = 'auc'
 
     try:
         # results_df = pd.read_csv(os.path.join(args.output_dir, args.results_df))
@@ -143,7 +286,7 @@ def main(args):
     print("Size of validation dataset: ", len(dataset_val))
     print("Size of test dataset: ", len(dataset_test))
     print("Number of classes: ", args.num_classes)
-    pprint(dataset.class_to_idx)
+    #pprint(dataset.class_to_idx)
 
     collate_fn = None
     mixup_transforms = get_mixup_transforms(args)
@@ -154,6 +297,11 @@ def main(args):
         def collate_fn(batch):
             return mixupcutmix(*default_collate(batch))
 
+    if(args.dataset == 'papila'):
+        drop_last = False
+    else:
+        drop_last = True
+
     data_loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -161,6 +309,7 @@ def main(args):
         num_workers=args.workers,
         pin_memory=True,
         collate_fn=collate_fn,
+        drop_last=drop_last
     )
     data_loader_val = torch.utils.data.DataLoader(
         dataset_val,
@@ -268,12 +417,36 @@ def main(args):
     if args.disable_training:
         print("Training Process Skipped")
     else:
+
+
+        ALL_TRAIN_AUC = []
+        ALL_TRAIN_BEST_AUC = []
+        ALL_TRAIN_WORST_AUC = []
+        ALL_TRAIN_ACC = []
+        ALL_TRAIN_BEST_ACC = []
+        ALL_TRAIN_WORST_ACC = []
+
+        ALL_VAL_AUC = []
+        ALL_VAL_BEST_AUC = []
+        ALL_VAL_WORST_AUC = []
+        ALL_VAL_ACC = []
+        ALL_VAL_BEST_ACC = []
+        ALL_VAL_WORST_ACC = []
+        
+
         print("Start training")
         start_time = time.time()
         for epoch in range(args.start_epoch, args.epochs):
             if args.distributed:
                 train_sampler.set_epoch(epoch)
-            train_one_epoch_fairness(
+            (
+                train_acc,
+                train_best_acc,
+                train_worst_acc,
+                train_auc,
+                train_best_auc,
+                train_worst_auc,
+            ) = train_one_epoch_fairness(
                 model,
                 criterion,
                 ece_criterion,
@@ -284,8 +457,16 @@ def main(args):
                 args,
                 model_ema,
                 scaler,
-            )
+                )
             lr_scheduler.step()
+
+            ALL_TRAIN_AUC.append(train_auc)
+            ALL_TRAIN_BEST_AUC.append(train_best_auc)
+            ALL_TRAIN_WORST_AUC.append(train_worst_auc)
+
+            ALL_TRAIN_ACC.append(train_acc)
+            ALL_TRAIN_BEST_ACC.append(train_best_acc)
+            ALL_TRAIN_WORST_ACC.append(train_worst_acc)
 
             if args.sens_attribute == "gender":
                 (
@@ -296,7 +477,8 @@ def main(args):
                     val_male_auc,
                     val_female_auc,
                     val_loss,
-                    val_max_loss,
+                    val_max_loss
+
                 ) = evaluate_fairness_gender(
                     model,
                     criterion,
@@ -305,6 +487,21 @@ def main(args):
                     args=args,
                     device=device,
                 )
+
+                best_val_acc = max(val_male_acc, val_female_acc)
+                worst_val_acc = min(val_male_acc, val_female_acc)
+
+                best_val_auc = max(val_male_auc, val_female_auc)
+                worst_val_auc = min(val_male_auc, val_female_auc)
+
+                ALL_VAL_AUC.append(val_auc)
+                ALL_VAL_BEST_AUC.append(best_val_auc)
+                ALL_VAL_WORST_AUC.append(worst_val_auc)
+
+                ALL_VAL_ACC.append(val_acc)
+                ALL_VAL_BEST_ACC.append(best_val_acc)
+                ALL_VAL_WORST_ACC.append(worst_val_acc)
+
                 print(
                     "Val Acc: {:.2f}, Val Male Acc {:.2f}, Val Female Acc {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
                         val_acc,
@@ -340,7 +537,7 @@ def main(args):
                         val_auc_type4,
                         val_auc_type5,
                         val_loss,
-                        val_max_loss,
+                        val_max_loss
                     ) = evaluate_fairness_skin_type(
                         model,
                         criterion,
@@ -349,6 +546,21 @@ def main(args):
                         args=args,
                         device=device,
                     )
+
+                    best_val_acc = max(val_acc_type0, val_acc_type1, val_acc_type2, val_acc_type3, val_acc_type4, val_acc_type5)
+                    worst_val_acc = min(val_acc_type0, val_acc_type1, val_acc_type2, val_acc_type3, val_acc_type4, val_acc_type5)
+
+                    best_val_auc = max(val_auc_type0, val_auc_type1, val_auc_type2, val_auc_type3, val_auc_type4, val_auc_type5)
+                    worst_val_auc = min(val_auc_type0, val_auc_type1, val_auc_type2, val_auc_type3, val_auc_type4, val_auc_type5)
+
+                    ALL_VAL_AUC.append(val_auc)
+                    ALL_VAL_BEST_AUC.append(best_val_auc)
+                    ALL_VAL_WORST_AUC.append(worst_val_auc)
+
+                    ALL_VAL_ACC.append(val_acc)
+                    ALL_VAL_BEST_ACC.append(best_val_acc)
+                    ALL_VAL_WORST_ACC.append(worst_val_acc)
+
                     print(
                         "Val Acc: {:.2f}, Val Type 0 Acc: {:.2f}, Val Type 1 Acc: {:.2f}, Val Type 2 Acc: {:.2f}, Val Type 3 Acc: {:.2f}, Val Type 4 Acc: {:.2f}, Val Type 5 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
                             val_acc,
@@ -393,6 +605,20 @@ def main(args):
                         args=args,
                         device=device,
                     )
+
+                    best_val_acc = max(val_acc_type0, val_acc_type1)
+                    worst_val_acc = min(val_acc_type0, val_acc_type1)
+
+                    best_val_auc = max(val_auc_type0, val_auc_type1)
+                    worst_val_auc = min(val_auc_type0, val_auc_type1)
+
+                    ALL_VAL_AUC.append(val_auc)
+                    ALL_VAL_BEST_AUC.append(best_val_auc)
+                    ALL_VAL_WORST_AUC.append(worst_val_auc)
+
+                    ALL_VAL_ACC.append(val_acc)
+                    ALL_VAL_BEST_ACC.append(best_val_acc)
+                    ALL_VAL_WORST_ACC.append(worst_val_acc)
                     
                     print(
                         "Val Acc: {:.2f}, Val Type 0 Acc: {:.2f}, Val Type 1 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
@@ -428,7 +654,7 @@ def main(args):
                         auc_age3_avg,
                         auc_age4_avg,
                         val_loss,
-                        val_max_loss,
+                        val_max_loss
                     ) = evaluate_fairness_age(
                         model,
                         criterion,
@@ -437,6 +663,21 @@ def main(args):
                         args=args,
                         device=device,
                     )
+
+                    best_val_acc = max(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
+                    worst_val_acc = min(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
+
+                    best_val_auc = max(auc_age0_avg, auc_age1_avg, auc_age2_avg, auc_age3_avg, auc_age4_avg)
+                    worst_val_auc = min(auc_age0_avg, auc_age1_avg, auc_age2_avg, auc_age3_avg, auc_age4_avg)
+
+                    ALL_VAL_AUC.append(val_auc)
+                    ALL_VAL_BEST_AUC.append(best_val_auc)
+                    ALL_VAL_WORST_AUC.append(worst_val_auc)
+
+                    ALL_VAL_ACC.append(val_acc)
+                    ALL_VAL_BEST_ACC.append(best_val_acc)
+                    ALL_VAL_WORST_ACC.append(worst_val_acc)
+
                     print(
                         "Val Acc: {:.2f}, Val Age Group0 Acc: {:.2f}, Val Age Group1 Acc: {:.2f}, Val Age Group2 Acc: {:.2f}, Val Age Group3 Acc: {:.2f}, Val Age Group4 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
                             val_acc,
@@ -468,7 +709,7 @@ def main(args):
                         auc_age0_avg,
                         auc_age1_avg,
                         val_loss,
-                        val_max_loss,
+                        val_max_loss
                     ) = evaluate_fairness_age_binary(
                         model,
                         criterion,
@@ -477,6 +718,21 @@ def main(args):
                         args=args,
                         device=device,
                     )
+                    
+                    best_val_acc = max(acc_age0_avg, acc_age1_avg)
+                    worst_val_acc = min(acc_age0_avg, acc_age1_avg)
+
+                    best_val_auc = max(auc_age0_avg, auc_age1_avg)
+                    worst_val_auc = min(auc_age0_avg, auc_age1_avg)
+
+                    ALL_VAL_AUC.append(val_auc)
+                    ALL_VAL_BEST_AUC.append(best_val_auc)
+                    ALL_VAL_WORST_AUC.append(worst_val_auc)
+
+                    ALL_VAL_ACC.append(val_acc)
+                    ALL_VAL_BEST_ACC.append(best_val_acc)
+                    ALL_VAL_WORST_ACC.append(worst_val_acc)
+
                     print(
                         "Val Acc: {:.2f}, Val Age Group0 Acc: {:.2f}, Val Age Group1 Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
                             val_acc,
@@ -775,7 +1031,19 @@ def main(args):
         test_results_df.to_csv(
             os.path.join(args.output_dir, args.test_results_df), index=False
         )
+        
+        if(args.use_metric == 'aic'):
+            # Potting the training AUC, Best AUC and Worst AUC
+            plot_auc(args, ALL_TRAIN_AUC, ALL_TRAIN_BEST_AUC, ALL_TRAIN_WORST_AUC, is_train=True)
 
+            # Potting the validation AUC, Best AUC and Worst AUC
+            plot_auc(args, ALL_VAL_AUC, ALL_VAL_BEST_AUC, ALL_VAL_WORST_AUC, is_train=False)
+        else:
+            # Potting the training AUC, Best AUC and Worst AUC
+            plot_acc(args, ALL_TRAIN_ACC, ALL_TRAIN_BEST_ACC, ALL_TRAIN_WORST_ACC, is_train=True)
+
+            # Potting the validation ACC, Best ACC and Worst ACC
+            plot_acc(args, ALL_VAL_ACC, ALL_VAL_BEST_ACC, ALL_VAL_WORST_ACC, is_train=False)
 
 if __name__ == "__main__":
     args = get_args_parser().parse_args()

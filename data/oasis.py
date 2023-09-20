@@ -29,10 +29,13 @@ class OASISDataset(Dataset):
         return self.df['CDR'].unique()
     
     def _get_class_to_idx(self):
+        # return {0:'Non-Demented',
+        #         1:'Very Mild-Dementia',
+        #         2:'Mild-Dementia',
+        #         3:'Moderate-Dementia'
+        #         }
         return {0:'Non-Demented',
-                1:'Very Mild-Dementia',
-                2:'Mild-Dementia',
-                3:'Moderate-Dementia'
+                1:'Dementia',
                 }
     
     def __getitem__(self, idx):

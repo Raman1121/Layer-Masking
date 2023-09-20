@@ -372,14 +372,19 @@ def get_args_parser(add_help=True):
     parser.add_argument('--skin_type', type=str, default='multi', choices=['binary', 'multi'])
     parser.add_argument('--use_metric', type=str, default='acc', choices=['acc', 'auc'])
 
-    # HPARAM OPT Arguements
-    parser.add_argument("--objective_metric", type=str, default="min_acc", choices=["min_acc", "acc_diff", "max_loss", "overall_acc"])
+    # HPARAM OPT (HPO) Arguements
+    parser.add_argument("--objective_metric", type=str, default="min_acc", choices=["min_acc", "min_auc", "acc_diff", "auc_diff", "max_loss", "overall_acc", "overall_auc"])
     parser.add_argument("--num_trials", type=int, default=5)
     parser.add_argument("--pruner", type=str, default='SuccessiveHalving', choices=['SuccessiveHalving', 'MedianPruner', 'Hyperband'])
     parser.add_argument(
         "--disable_storage",
         action="store_true",
         help="Disable creating a storage DB for the experiment",
+    )
+    parser.add_argument(
+        "--use_multi_objective",
+        help="Use multi-objective optimization for HPO",
+        action="store_true",
     )
 
     return parser

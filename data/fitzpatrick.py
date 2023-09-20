@@ -21,7 +21,8 @@ class FitzpatrickDataset(Dataset):
         return len(self.df)
     
     def get_num_classes(self):
-        return self.df['label_idx'].unique()
+        #return self.df['label_idx'].unique()
+        return self.df['binary_label'].unique()
     
     def _get_class_to_idx(self):
         return {'benign': 0, 'malignant': 1, 'non-neoplastic': 2}
@@ -29,7 +30,8 @@ class FitzpatrickDataset(Dataset):
     def __getitem__(self, idx):
         image = read_image(self.df.iloc[idx]['Path'], mode=ImageReadMode.RGB)
         image = T.ToPILImage()(image)
-        label = self.df.iloc[idx]['label_idx']
+        #label = self.df.iloc[idx]['label_idx']
+        label = self.df.iloc[idx]['binary_label']
 
         if(self.skin_type == 'multi'):
             sens_attribute = self.df.iloc[idx]['skin_type']
