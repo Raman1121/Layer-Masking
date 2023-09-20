@@ -1048,6 +1048,9 @@ def main(args):
 if __name__ == "__main__":
     args = get_args_parser().parse_args()
     args.output_dir = os.path.join(os.getcwd(), args.model, args.dataset)
+
+    if("auc" in args.objective_metric):
+        args.use_metric = 'auc'
     
     if(args.use_metric == 'acc'):
         args.test_results_df = "NEW_TEST_SET_RESULTS_" + args.sens_attribute + "_" + args.objective_metric + ".csv"
