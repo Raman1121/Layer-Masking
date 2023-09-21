@@ -6,6 +6,7 @@ import datetime
 import random
 import re
 import time
+import json
 import warnings
 import timm
 import pandas as pd
@@ -99,6 +100,8 @@ def plot_auc(args, AUC_list, best_AUC_list, worst_AUC_list, is_train):
 
     assert is_train is not None
 
+    print("Saving AUC List")
+
     ALL_AUC = []
     ALL_BEST_AUC = []
     ALL_WORST_AUC = []
@@ -131,43 +134,63 @@ def plot_auc(args, AUC_list, best_AUC_list, worst_AUC_list, is_train):
     for i in range(len(ALL_AUC)):
         ALL_AUC_DIFF.append(ALL_BEST_AUC[i] - ALL_WORST_AUC[i])
 
+    # if(is_train):
+    #     figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'training.png'
+    #     label1 = 'Train AUC'
+    #     label2 = 'Train Best AUC'
+    #     label3 = 'Train Worst AUC'
+    #     title = 'Overall, Best and Worst Sub-group Training AUC'
+    # else:
+    #     figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'validation.png'
+    #     label1 = 'Val AUC'
+    #     label2 = 'Val Best AUC'
+    #     label3 = 'Val Worst AUC'
+    #     title = 'Overall, Best and Worst Sub-group Validation AUC'
+
+    # # Plot the validation AUC, best and worst AUC in the same figure as a line plot
+    # plt.figure(figsize=(10, 10))
+    # plt.plot(ALL_AUC, label=label1)
+    # plt.plot(ALL_BEST_AUC, label=label2)
+    # plt.plot(ALL_WORST_AUC, label=label3)
+    # plt.plot(ALL_AUC_DIFF, label='AUC Difference')
+    # plt.xlabel('Epochs')
+    # plt.ylabel('AUC')
+    # plt.title(title)
+    # plt.xticks(list(range(len(ALL_WORST_AUC))))
+    # plt.legend()
+    # plt.savefig(os.path.join(args.fig_savepath, figname))
+
+    # if(is_train):
+    #     print("Training AUC Plot saved at: ", os.path.join(args.fig_savepath, figname))
+    # else:
+    #     print("Validation AUC Plot saved at: ", os.path.join(args.fig_savepath, figname))
+
+    # plt.close()
+
+    # Save the validation ACC, best and worst ACC as json_files
     if(is_train):
-        figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'training.png'
-        label1 = 'Train AUC'
-        label2 = 'Train Best AUC'
-        label3 = 'Train Worst AUC'
-        title = 'Overall, Best and Worst Sub-group Training AUC'
+        json_filename = 'AUC_' + args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'training.json'
     else:
-        figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'validation.png'
-        label1 = 'Val AUC'
-        label2 = 'Val Best AUC'
-        label3 = 'Val Worst AUC'
-        title = 'Overall, Best and Worst Sub-group Validation AUC'
+        json_filename = 'AUC_' + args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'validation.json'
 
-    # Plot the validation AUC, best and worst AUC in the same figure as a line plot
-    plt.figure(figsize=(10, 10))
-    plt.plot(ALL_AUC, label=label1)
-    plt.plot(ALL_BEST_AUC, label=label2)
-    plt.plot(ALL_WORST_AUC, label=label3)
-    plt.plot(ALL_AUC_DIFF, label='AUC Difference')
-    plt.xlabel('Epochs')
-    plt.ylabel('AUC')
-    plt.title(title)
-    plt.xticks(list(range(len(ALL_WORST_AUC))))
-    plt.legend()
-    plt.savefig(os.path.join(args.fig_savepath, figname))
+    json_dict = {
+        'AUC': ALL_AUC,
+        'Best AUC': ALL_BEST_AUC,
+        'Worst AUC': ALL_WORST_AUC,
+        'AUC Difference': ALL_AUC_DIFF
+    }
 
-    if(is_train):
-        print("Training AUC Plot saved at: ", os.path.join(args.fig_savepath, figname))
-    else:
-        print("Validation AUC Plot saved at: ", os.path.join(args.fig_savepath, figname))
-
-    plt.close()
+    # Save the file to disk
+    print("Saving json file at: ", os.path.join(args.fig_savepath, json_filename))
+    with open(os.path.join(args.fig_savepath, json_filename), 'w') as fp:
+        json.dump(json_dict, fp)
 
 
 def plot_acc(args, ACC_list, best_ACC_list, worst_ACC_list, is_train):
 
     assert is_train is not None
+
+    print("Saving ACC List")
 
     ALL_ACC = []
     ALL_BEST_ACC = []
@@ -201,38 +224,58 @@ def plot_acc(args, ACC_list, best_ACC_list, worst_ACC_list, is_train):
     for i in range(len(ALL_ACC)):
         ALL_ACC_DIFF.append(ALL_BEST_ACC[i] - ALL_WORST_ACC[i])
 
-    if(is_train):
-        figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'training.png'
-        label1 = 'Train ACC'
-        label2 = 'Train Best ACC'
-        label3 = 'Train Worst ACC'
-        title = 'Overall, Best and Worst Sub-group Training ACC'
-    else:
-        figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'validation.png'
-        label1 = 'Val ACC'
-        label2 = 'Val Best ACC'
-        label3 = 'Val Worst ACC'
-        title = 'Overall, Best and Worst Sub-group Validation ACC'
+    # if(is_train):
+    #     figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'training.png'
+    #     label1 = 'Train ACC'
+    #     label2 = 'Train Best ACC'
+    #     label3 = 'Train Worst ACC'
+    #     title = 'Overall, Best and Worst Sub-group Training ACC'
+    # else:
+    #     figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'validation.png'
+    #     label1 = 'Val ACC'
+    #     label2 = 'Val Best ACC'
+    #     label3 = 'Val Worst ACC'
+    #     title = 'Overall, Best and Worst Sub-group Validation ACC'
 
     # Plot the validation ACC, best and worst ACC in the same figure as a line plot
-    plt.figure(figsize=(12, 16))
-    plt.plot(ALL_ACC, label=label1)
-    plt.plot(ALL_BEST_ACC, label=label2)
-    plt.plot(ALL_WORST_ACC, label=label3)
-    plt.plot(ALL_ACC_DIFF, label='ACC Difference')
-    plt.xlabel('Epochs')
-    plt.ylabel('ACC')
-    plt.title(title)
-    plt.xticks(list(range(len(ALL_WORST_ACC))))
-    plt.legend()
-    plt.savefig(os.path.join(args.fig_savepath, figname))
+    # plt.figure(figsize=(12, 16))
+    # plt.plot(ALL_ACC, label=label1)
+    # plt.plot(ALL_BEST_ACC, label=label2)
+    # plt.plot(ALL_WORST_ACC, label=label3)
+    # plt.plot(ALL_ACC_DIFF, label='ACC Difference')
+    # plt.xlabel('Epochs')
+    # plt.ylabel('ACC')
+    # plt.title(title)
+    # plt.xticks(list(range(len(ALL_WORST_ACC))))
+    # plt.legend()
+    # plt.savefig(os.path.join(args.fig_savepath, figname))
 
+    # if(is_train):
+    #     print("Training ACC Plot saved at: ", os.path.join(args.fig_savepath, figname))
+    # else:
+    #     print("Validation ACC Plot saved at: ", os.path.join(args.fig_savepath, figname))
+
+    # plt.close()
+
+    # Save the validation ACC, best and worst ACC as json_files
     if(is_train):
-        print("Training ACC Plot saved at: ", os.path.join(args.fig_savepath, figname))
+        json_filename = 'ACC_' + args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'training.json'
     else:
-        print("Validation ACC Plot saved at: ", os.path.join(args.fig_savepath, figname))
+        json_filename = 'ACC_' + args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'validation.json'
 
-    plt.close()
+    json_dict = {
+        'ACC': ALL_ACC,
+        'Best ACC': ALL_BEST_ACC,
+        'Worst ACC': ALL_WORST_ACC,
+        'ACC Difference': ALL_ACC_DIFF
+    }
+
+    # Save the file to disk
+    print("Saving json file at: ", os.path.join(args.fig_savepath, json_filename))
+    with open(os.path.join(args.fig_savepath, json_filename), 'w') as fp:
+        json.dump(json_dict, fp)
+
+
 
 def main(args):
     assert args.sens_attribute is not None, "Sensitive attribute not provided"
@@ -243,9 +286,6 @@ def main(args):
     if args.output_dir:
         utils.mkdir(args.output_dir)
         utils.mkdir(os.path.join(args.output_dir, "checkpoints"))
-
-    if("auc" in args.objective_metric):
-        args.use_metric = 'auc'
 
     try:
         # results_df = pd.read_csv(os.path.join(args.output_dir, args.results_df))
@@ -1032,7 +1072,7 @@ def main(args):
             os.path.join(args.output_dir, args.test_results_df), index=False
         )
         
-        if(args.use_metric == 'aic'):
+        if(args.use_metric == 'auc'):
             # Potting the training AUC, Best AUC and Worst AUC
             plot_auc(args, ALL_TRAIN_AUC, ALL_TRAIN_BEST_AUC, ALL_TRAIN_WORST_AUC, is_train=True)
 
