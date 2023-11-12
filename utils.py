@@ -9,6 +9,7 @@ import re
 import errno
 import hashlib
 import numpy as np
+from scipy.interpolate import interp1d
 
 import time
 from collections import defaultdict, deque, OrderedDict
@@ -22,6 +23,8 @@ import torch.distributed as dist
 import matplotlib.pyplot as plt
 import seaborn as sns
 import sklearn.metrics as sklm
+
+from fairlearn.metrics import equalized_odds_difference, equalized_odds_ratio, demographic_parity_difference, demographic_parity_ratio
 
 ###################### HELPER FUNCTIONS #######################
 
@@ -407,6 +410,8 @@ def create_lora_model(
     return lora_model
 
 
+
+
 def get_timm_model(encoder, num_classes, **kwargs):
     """
     Returns a timm model for a given encoder.
@@ -414,27 +419,57 @@ def get_timm_model(encoder, num_classes, **kwargs):
 
     assert num_classes is not None, "Number of classes cannot be None"
 
+    pretrained = kwargs["pretrained"] if "pretrained" in kwargs else True
+    print("Pretrained: ", pretrained)
+
     if encoder == "vit_base":
         model = timm.create_model(
             "vit_base_patch16_224",
+            pretrained=pretrained,
+            num_classes=num_classes,
+        )
+    elif encoder == "vit_base_moco":
+        model = timm.create_model(
+            "vit_base_patch16_224",
+            pretrained=False,
+            num_classes=num_classes,
+        )
+
+        # Load the MOCO checkpoint
+        CKPT_PATH = "checkpoints/vit_base_moco_0299.pth.tar"
+        checkpoint = torch.load(CKPT_PATH)
+        new_state_dict = utils.convert_ssl_to_timm(checkpoint)
+        mssg = model.load_state_dict(new_state_dict, strict=False)
+
+    elif encoder == "vit_base_mae":
+        model = timm.create_model(
+            "vit_base_patch16_224.mae",
             pretrained=True,
             num_classes=num_classes,
         )
-    elif encoder == "vit_base_ssl":
+
+    elif encoder == "vit_base_clip":
         model = timm.create_model(
-            "vit_base_patch16_224_dino",
+            "timm/vit_base_patch16_clip_224.openai",
             pretrained=True,
+            num_classes=num_classes,
+        )
+
+    elif encoder == "vit_base_dino":
+        model = timm.create_model(
+            "vit_base_patch16_224.dino",
+            pretrained=pretrained,
             num_classes=num_classes,
         )
     elif encoder == "vit_large":
         model = timm.create_model(
             "vit_large_patch16_224",
-            pretrained=True,
+            pretrained=pretrained,
             num_classes=num_classes,
         )
     elif encoder == "vit_huge":
         model = timm.create_model(
-            "vit_huge_patch14_224", pretrained=True, num_classes=num_classes
+            "vit_huge_patch14_224", pretrained=pretrained, num_classes=num_classes
         )
 
     return model
@@ -443,7 +478,9 @@ def get_timm_model(encoder, num_classes, **kwargs):
 def get_masked_model(model, method, **kwargs):
     if method == "fullft":
         pass
-    if method == "tune_attention":
+    elif method == "train_from_scratch":
+        pass
+    elif method == "tune_attention":
         disable_module(model)
         vector = tune_attention_layers(model)
     elif method == "tune_attention_params_random":
@@ -1467,6 +1504,146 @@ def auc_by_age_binary(output, target, sens_attribute, topk=(1,)):
 
         return score, type0_score, type1_score
 
+# Equalized odds Difference
+def equiodds_difference(preds, labels, attrs):
+    print("Preds: ", np.unique(preds))
+    print("Labels: ", np.unique(labels.cpu()))
+    print("Attrs: ", np.unique(attrs))
+    print("\n")
+    return round(equalized_odds_difference(
+                                labels.cpu(),
+                                preds,
+                                sensitive_features=attrs), 3)
+
+# Equalized odds Ratio
+def equiodds_ratio(preds, labels, attrs):
+    return round(equalized_odds_ratio(
+                        labels.cpu(),
+                        preds,
+                        sensitive_features=attrs), 3)
+
+# Demographic Parity Difference
+def dpd(preds, labels, attrs):
+    return round(demographic_parity_difference(
+                        labels.cpu(),
+                        preds,
+                        sensitive_features=attrs), 3)
+
+# Demographic Parity Ratio
+def dpr(preds, labels, attrs):
+    return round(demographic_parity_ratio(
+                        labels.cpu(),
+                        preds,
+                        sensitive_features=attrs), 3)
+
+# def conditional_errors_binary(preds, labels, attrs):
+#     """
+#     Compute the conditional errors of A = 0/1. All the arguments need to be one-dimensional vectors.
+#     :param preds: The predicted label given by a model.
+#     :param labels: The groundtruth label.
+#     :param attrs: The label of sensitive attribute.
+#     :return: Overall classification error, error | A = 0, error | A = 1.
+#     """
+#     with torch.inference_mode():
+#         batch_size = labels.size(0)
+#         if labels.ndim == 2:
+#             labels = labels.max(dim=1)[1]
+
+#         preds = np.array(np.argmax(preds, axis=1))
+#         labels = labels.cpu().detach().data.numpy()
+#         attrs = np.array(attrs)
+
+#         # import pdb; pdb.set_trace()
+    
+#         assert preds.shape == labels.shape and labels.shape == attrs.shape
+#         cls_error = 1 - np.mean((preds == labels).astype('float'))
+#         idx = attrs == 0
+#         error_0 = 1 - np.mean((preds[idx] == labels[idx]).astype('float'))
+#         error_1 = 1 - np.mean((preds[~idx] == labels[~idx]).astype('float'))
+#         return cls_error, error_0, error_1
+
+# def eqodd_at_specificity(output, labels, attrs, specificity):
+
+#     with torch.inference_mode():
+        
+#         # if labels.ndim == 2:
+#         #     labels = labels.max(dim=1)[1]
+
+#         pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+#         preds = np.argmax(pred_probs, axis=1)
+        
+#         labels = labels.cpu().detach().data.numpy()
+#         attrs = np.array(attrs)
+    
+#         assert preds.shape == labels.shape and labels.shape == attrs.shape
+#         fprs, tprs, thress = sklm.roc_curve(labels, preds)
+#         thresh = interp1d(1 - fprs, thress)(specificity)
+    
+#         return cal_eqodd(preds, labels, attrs, threshold = thresh)
+
+# def eqodd_at_sensitivity(output, labels, attrs, sensitivity):
+
+#     with torch.inference_mode():
+#         batch_size = labels.size(0)
+#         if labels.ndim == 2:
+#             labels = labels.max(dim=1)[1]
+
+#         pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+#         preds = np.argmax(pred_probs, axis=1)
+#         attrs = np.array(attrs)
+        
+#         labels = labels.cpu().detach().data.numpy()
+    
+#         assert preds.shape == labels.shape and labels.shape == attrs.shape
+#         fprs, tprs, thress = sklm.roc_curve(labels, preds)
+#         thresh = interp1d(tprs, thress)(sensitivity)
+        
+#         return cal_eqodd(preds, labels, attrs, threshold = thresh)
+
+# def cal_eqodd(pred_probs, labels, attrs, threshold=0.5):
+
+#     with torch.inference_mode():
+#         # import pdb; pdb.set_trace()
+        
+#         # if(not isinstance(labels, torch.Tensor)):
+#         #     labels = torch.tensor(labels)
+        
+#         # if labels.ndim == 2:
+#         #     labels = labels.max(dim=1)[1]
+
+#         # pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+#         labels = labels.cpu().detach().data
+
+#         tol_predicted = (pred_probs > threshold).astype('float')
+#         sens_idx = attrs == 0
+#         target_idx = labels == 0
+#         cls_error, error_0, error_1 = conditional_errors_binary(tol_predicted, labels, attrs)
+#         cond_00 = np.mean((tol_predicted[np.logical_and(sens_idx, target_idx)]))
+#         cond_10 = np.mean((tol_predicted[np.logical_and(~sens_idx, target_idx)]))
+#         cond_01 = np.mean((tol_predicted[np.logical_and(sens_idx, ~target_idx)]))
+#         cond_11 = np.mean((tol_predicted[np.logical_and(~sens_idx, ~target_idx)]))
+#         return (1 - 0.5 * (np.abs(cond_00 - cond_10) + np.abs(cond_01 - cond_11)))
+
+# def cal_eqopp(pred_probs, labels, attrs, threshold=0.5):
+#     with torch.inference_mode():
+#         labels = labels.cpu().detach().data
+#         #tol_predicted = (pred_probs > threshold).astype('float')
+#         tol_predicted = np.argmax(pred_probs, axis=1)
+#         sens_idx = attrs == 0
+#         target_idx = labels == 0
+
+#         cond_00 = np.mean((tol_predicted[np.logical_and(sens_idx, target_idx)]))
+#         cond_10 = np.mean((tol_predicted[np.logical_and(~sens_idx, target_idx)]))
+#         cond_01 = np.mean((tol_predicted[np.logical_and(sens_idx, ~target_idx)]))
+#         cond_11 = np.mean((tol_predicted[np.logical_and(~sens_idx, ~target_idx)]))
+
+#         eqOpp1 = 1 - np.abs(cond_00 - cond_10)
+#         eqOpp0 = 1 - np.abs(cond_01 - cond_11)
+
+#         # import pdb; pdb.set_trace()
+
+#         return eqOpp0, eqOpp1
+            
 def accuracy(output, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
     with torch.inference_mode():

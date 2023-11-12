@@ -225,7 +225,7 @@ def objective(trial):
     # Saving results to a dataframe
     results_df_savedir = os.path.join(args.model, args.dataset, "Optuna Results")
     if not os.path.exists(results_df_savedir):
-        os.makedirs(results_df_savedir)
+        os.makedirs(results_df_savedir, exist_ok=True)
     results_df_name = "Fairness_Optuna_" + args.sens_attribute + "_" + args.tuning_method + "_" + args.model + "_" + args.objective_metric + ".csv"
 
     if("auc" in args.objective_metric):

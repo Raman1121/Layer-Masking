@@ -22,7 +22,7 @@ import torch.utils.data
 import torchvision
 import transforms
 import utils
-from data import HAM10000, fitzpatrick, papila, ol3i, oasis
+from data import HAM10000, fitzpatrick, papila, ol3i, oasis, chexpert, glaucoma
 from torch.utils.data.sampler import SubsetRandomSampler
 from sampler import RASampler
 from torch import nn
@@ -178,11 +178,23 @@ def train_one_epoch_fairness(
                 output, target, sens_attr, topk=(1, args.num_classes)
             )
 
-            # best_acc = max(acc_male, acc_female)
-            # worst_acc = min(acc_male, acc_female)
+            ########################################## EquiOpp ########################################
+            # pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+            # preds = np.argmax(pred_probs, axis=1)
+            # equiopp_0, equiopp_1 = utils.cal_eqopp(pred_probs, target, sens_attr, threshold=0.5)
+            # equiodd = utils.cal_eqodd(pred_probs, target, sens_attr, threshold=0.5)
 
-            # best_auc = max(auc_male, auc_female)
-            # worst_auc = min(auc_male, auc_female)
+            # print("EquiOpp 0: ", equiopp_0)
+            # print("EquiOpp 1: ", equiopp_1)
+            # print("EquiOdd: ", equiodd)
+            
+            #eqodd_threh = utils.cal_eqodd(pred_probs, target, sens_attr, threshold = 0.5)
+            # eqodd_at_specif = utils.eqodd_at_specificity(output, target, sens_attr, specificity = 0.8)
+            # eqodd_at_sensit = utils.eqodd_at_sensitivity(output, target, sens_attr, sensitivity = 0.8)
+
+            #print("EqOdd Threshold: ", eqodd_threh)
+            # print("EqOdd at Specificity: ", eqodd_at_specif)
+            # print("EqOdd at Sensitivity: ", eqodd_at_sensit)
 
         elif args.sens_attribute == "skin_type":
             
@@ -294,6 +306,7 @@ def train_one_epoch_fairness(
                 metric_logger.meters["auc_female"].update(auc_female, n=batch_size)
             else:
                 metric_logger.meters["auc_female"].update(0.0, n=0)
+
 
         elif args.sens_attribute == "skin_type":
             
@@ -855,6 +868,8 @@ def evaluate_fairness_gender(
             # sens_attr = sens_attr.to(device, non_blocking=True)
 
             output = model(image)
+            pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+            preds = np.argmax(pred_probs, axis=1)
             loss = criterion(output, target)
             ece_loss = ece_criterion(output, target)
 
@@ -892,11 +907,22 @@ def evaluate_fairness_gender(
             acc_male = acc_male[0]
             acc_female = acc_female[0]
 
-            
+            # Accuracy
             acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
 
             # AUC
             auc, auc_male, auc_female = utils.auc_by_gender(output, target, sens_attr, topk=(1, args.num_classes))
+
+            # Equalized Odds and Equalized Opportunity
+            # equiopp_0, equiopp_1 = utils.cal_eqopp(pred_probs, target, sens_attr, threshold=0.5)
+            # equiodd = utils.cal_eqodd(pred_probs, target, sens_attr, threshold=0.5)
+            equiodd_diff = utils.equiodds_difference(preds, target, sens_attr)
+            equiodd_ratio = utils.equiodds_ratio(preds, target, sens_attr)
+
+            # Demographic Parity Difference and Ratio
+            dpd = utils.dpd(preds, target, sens_attr)
+            dpr = utils.dpr(preds, target, sens_attr)
+
 
             batch_size = image.shape[0]
             metric_logger.update(loss=torch.mean(loss).item())
@@ -914,6 +940,16 @@ def evaluate_fairness_gender(
                 metric_logger.meters["auc_male"].update(auc_male, n=batch_size)
             if auc_female is not np.nan:
                 metric_logger.meters["auc_female"].update(auc_female, n=batch_size)
+
+            if equiodd_diff is not np.nan:
+                metric_logger.meters["equiodd_diff"].update(equiodd_diff, n=batch_size)
+            if equiodd_ratio is not np.nan:
+                metric_logger.meters["equiodd_ratio"].update(equiodd_ratio, n=batch_size)
+
+            if dpd is not np.nan:
+                metric_logger.meters["dpd"].update(dpd, n=batch_size)
+            if dpr is not np.nan:
+                metric_logger.meters["dpr"].update(dpr, n=batch_size)
 
             metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
             metric_logger.meters["diff_loss"].update(diff_loss, n=batch_size)
@@ -948,7 +984,14 @@ def evaluate_fairness_gender(
     male_auc_avg = metric_logger.auc_male.global_avg
     female_auc_avg = metric_logger.auc_female.global_avg
 
-    return (
+    avg_e_diff = metric_logger.equiodd_diff.global_avg
+    avg_e_ratio = metric_logger.equiodd_ratio.global_avg
+
+    avg_dpd = metric_logger.dpd.global_avg
+    avg_dpr = metric_logger.dpr.global_avg
+
+    if(args.cal_equiodds):
+        return (
         round(acc_avg, 3),
         round(male_acc_avg, 3),
         round(female_acc_avg, 3),
@@ -957,7 +1000,22 @@ def evaluate_fairness_gender(
         round(female_auc_avg, 3),
         loss,
         max_val_loss,
-    )
+        avg_e_diff,
+        avg_e_ratio,
+        avg_dpd,
+        avg_dpr
+        )
+    else:
+        return (
+            round(acc_avg, 3),
+            round(male_acc_avg, 3),
+            round(female_acc_avg, 3),
+            round(auc_avg, 3),
+            round(male_auc_avg, 3),
+            round(female_auc_avg, 3),
+            loss,
+            max_val_loss,
+        )
 
 
 def evaluate_fairness_skin_type(
@@ -1261,6 +1319,8 @@ def evaluate_fairness_skin_type_binary(
             # sens_attr = sens_attr.to(device, non_blocking=True)
 
             output = model(image)
+            pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+            preds = np.argmax(pred_probs, axis=1)
             loss = criterion(output, target)
             ece_loss = ece_criterion(output, target)
 
@@ -1313,6 +1373,15 @@ def evaluate_fairness_skin_type_binary(
                 output, target, sens_attr, num_skin_types=2
             )
 
+            # Equalized Odds and Equalized Opportunity
+            equiodd_diff = utils.equiodds_difference(preds, target, sens_attr)
+            equiodd_ratio = utils.equiodds_ratio(preds, target, sens_attr)
+
+            # Demographic Parity Difference and Ratio
+            dpd = utils.dpd(preds, target, sens_attr)
+            dpr = utils.dpr(preds, target, sens_attr)
+
+
             acc1 = acc1[0]
 
             try:
@@ -1344,6 +1413,17 @@ def evaluate_fairness_skin_type_binary(
             if(auc_type1 != np.nan):
                 metric_logger.meters["auc_type1"].update(auc_type1, n=batch_size)
 
+            if equiodd_diff is not np.nan:
+                metric_logger.meters["equiodd_diff"].update(equiodd_diff, n=batch_size)
+            if equiodd_ratio is not np.nan:
+                metric_logger.meters["equiodd_ratio"].update(equiodd_ratio, n=batch_size)
+
+            if dpd is not np.nan:
+                metric_logger.meters["dpd"].update(dpd, n=batch_size)
+            if dpr is not np.nan:
+                metric_logger.meters["dpr"].update(dpr, n=batch_size)
+
+
             #metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
             metric_logger.meters["auc"].update(auc, n=batch_size)
             metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
@@ -1365,17 +1445,40 @@ def evaluate_fairness_skin_type_binary(
     auc_avg = metric_logger.auc.global_avg
     auc_type0_avg = metric_logger.auc_type0.global_avg
     auc_type1_avg = metric_logger.auc_type1.global_avg
+
+    # Equalized Odds and Equalized Opportunity
+    avg_e_diff = metric_logger.equiodd_diff.global_avg
+    avg_e_ratio = metric_logger.equiodd_ratio.global_avg
+
+    avg_dpd = metric_logger.dpd.global_avg
+    avg_dpr = metric_logger.dpr.global_avg
     
-    return (
-        round(acc_avg, 3),
-        round(acc_type0_avg, 3),
-        round(acc_type1_avg, 3),
-        round(auc_avg, 3),
-        round(auc_type0_avg, 3),
-        round(auc_type1_avg, 3),
-        loss,
-        max_val_loss,
-    )
+    if(args.cal_equiodds):
+        return (
+            round(acc_avg, 3),
+            round(acc_type0_avg, 3),
+            round(acc_type1_avg, 3),
+            round(auc_avg, 3),
+            round(auc_type0_avg, 3),
+            round(auc_type1_avg, 3),
+            loss,
+            max_val_loss,
+            avg_e_diff,
+            avg_e_ratio,
+            avg_dpd,
+            avg_dpr
+        )
+    else:
+        return (
+            round(acc_avg, 3),
+            round(acc_type0_avg, 3),
+            round(acc_type1_avg, 3),
+            round(auc_avg, 3),
+            round(auc_type0_avg, 3),
+            round(auc_type1_avg, 3),
+            loss,
+            max_val_loss,
+        )
 
 def evaluate_fairness_age(
     model,
@@ -1648,6 +1751,8 @@ def evaluate_fairness_age_binary(
             # sens_attr = sens_attr.to(device, non_blocking=True)
 
             output = model(image)
+            pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+            preds = np.argmax(pred_probs, axis=1)
             loss = criterion(output, target)
             ece_loss = ece_criterion(output, target)
 
@@ -1696,6 +1801,8 @@ def evaluate_fairness_age_binary(
 
             diff_loss = torch.abs(max_val_loss - min_val_loss)
 
+            batch_size = image.shape[0]
+
             # Accuracy
             acc1, res_type0, res_type1 = utils.accuracy_by_age_binary(
                 output, target, sens_attr, topk=(1,)
@@ -1716,9 +1823,22 @@ def evaluate_fairness_age_binary(
                 output, target, sens_attr, topk=(1,)
             )
 
+            if auc != np.nan:
+                metric_logger.meters["auc"].update(auc, n=batch_size)
+            if auc_type0 != np.nan:
+                metric_logger.meters["auc_Age0"].update(auc_type0, n=batch_size)
+            if auc_type1 != np.nan:
+                metric_logger.meters["auc_Age1"].update(auc_type1, n=batch_size)
 
+            # Equalized Odds and Equalized Opportunity
+            equiodd_diff = utils.equiodds_difference(preds, target, sens_attr)
+            equiodd_ratio = utils.equiodds_ratio(preds, target, sens_attr)
 
-            batch_size = image.shape[0]
+            # Demographic Parity Difference and Ratio
+            dpd = utils.dpd(preds, target, sens_attr)
+            dpr = utils.dpr(preds, target, sens_attr)
+
+            
             metric_logger.update(loss=torch.mean(loss).item())
             metric_logger.update(ece_loss=ece_loss.item())
             metric_logger.update(max_val_loss=max_val_loss)
@@ -1728,12 +1848,15 @@ def evaluate_fairness_age_binary(
             metric_logger.meters["acc_Age0"].update(acc_type0.item(), n=batch_size)
             metric_logger.meters["acc_Age1"].update(acc_type1.item(), n=batch_size)
 
-            if auc != np.nan:
-                metric_logger.meters["auc"].update(auc, n=batch_size)
-            if auc_type0 != np.nan:
-                metric_logger.meters["auc_Age0"].update(auc_type0, n=batch_size)
-            if auc_type1 != np.nan:
-                metric_logger.meters["auc_Age1"].update(auc_type1, n=batch_size)
+            if equiodd_diff is not np.nan:
+                metric_logger.meters["equiodd_diff"].update(equiodd_diff, n=batch_size)
+            if equiodd_ratio is not np.nan:
+                metric_logger.meters["equiodd_ratio"].update(equiodd_ratio, n=batch_size)
+
+            if dpd is not np.nan:
+                metric_logger.meters["dpd"].update(dpd, n=batch_size)
+            if dpr is not np.nan:
+                metric_logger.meters["dpr"].update(dpr, n=batch_size)
 
             metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
             metric_logger.meters["diff_loss"].update(diff_loss, n=batch_size)
@@ -1754,18 +1877,41 @@ def evaluate_fairness_age_binary(
     auc_avg = metric_logger.auc.global_avg
     auc_age0_avg = metric_logger.auc_Age0.global_avg
     auc_age1_avg = metric_logger.auc_Age1.global_avg
+
+    # Equalized Odds and Equalized Opportunity
+    avg_e_diff = metric_logger.equiodd_diff.global_avg
+    avg_e_ratio = metric_logger.equiodd_ratio.global_avg
+
+    avg_dpd = metric_logger.dpd.global_avg
+    avg_dpr = metric_logger.dpr.global_avg
     
 
-    return (
-        round(acc_avg, 3),
-        round(acc_age0_avg, 3),
-        round(acc_age1_avg, 3),
-        round(auc_avg, 3),
-        round(auc_age0_avg, 3),
-        round(auc_age1_avg, 3),
-        loss,
-        max_val_loss,
-    )
+    if(args.cal_equiodds):
+        return (
+            round(acc_avg, 3),
+            round(acc_age0_avg, 3),
+            round(acc_age1_avg, 3),
+            round(auc_avg, 3),
+            round(auc_age0_avg, 3),
+            round(auc_age1_avg, 3),
+            loss,
+            max_val_loss,
+            avg_e_diff,
+            avg_e_ratio,
+            avg_dpd,
+            avg_dpr
+        )
+    else:
+        return (
+            round(acc_avg, 3),
+            round(acc_age0_avg, 3),
+            round(acc_age1_avg, 3),
+            round(auc_avg, 3),
+            round(auc_age0_avg, 3),
+            round(auc_age1_avg, 3),
+            loss,
+            max_val_loss,
+        )
 
 
 def _get_cache_path(filepath):
@@ -2006,6 +2152,10 @@ def load_fairness_data(args, df, df_val, df_test):
             dataset = ol3i.OL3IDataset(df, args.sens_attribute, transform, args.age_type)
         elif args.dataset == "oasis":
             dataset = oasis.OASISDataset(df, args.sens_attribute, transform, args.age_type)
+        elif args.dataset == 'chexpert':
+            dataset = chexpert.ChexpertDataset(df, args.sens_attribute, transform)
+        elif args.dataset == 'glaucoma':
+            dataset = glaucoma.HarvardGlaucoma(df, args.sens_attribute, transform)
         else:
             raise NotImplementedError("{} dataset not implemented for training".format(args.dataset))
 
@@ -2041,6 +2191,12 @@ def load_fairness_data(args, df, df_val, df_test):
         elif args.dataset == "oasis":
             dataset_val = oasis.OASISDataset(df_val, args.sens_attribute, transform_eval, args.age_type)
             dataset_test = oasis.OASISDataset(df_test, args.sens_attribute, transform_eval, args.age_type)
+        elif args.dataset == 'chexpert':
+            dataset_val = chexpert.ChexpertDataset(df_val, args.sens_attribute, transform_eval)
+            dataset_test = chexpert.ChexpertDataset(df_test, args.sens_attribute, transform_eval)
+        elif args.dataset == 'glaucoma':
+            dataset_val = glaucoma.HarvardGlaucoma(df_val, args.sens_attribute, transform_eval)
+            dataset_test = glaucoma.HarvardGlaucoma(df_test, args.sens_attribute, transform_eval)
         else:
             raise NotImplementedError("{} dataset not implemented for either validation or test".format(args.dataset))
 
@@ -2234,7 +2390,23 @@ def get_fairness_data(args, yaml_data):
     val_df = pd.read_csv(val_csv_path)
     test_df = pd.read_csv(test_csv_path)
 
-    if(args.dataset != "ol3i"):
+    if(args.train_subset_ratio is not None):
+        original_dataset_size = len(train_df)
+        dataset_size = int(len(train_df) * args.train_subset_ratio)
+        subset_rows = random.sample(range(original_dataset_size), k=dataset_size)
+
+        train_df = train_df.iloc[subset_rows]
+        train_df = train_df.reset_index(drop=True)
+
+    if(args.val_subset_ratio is not None):
+        original_dataset_size = len(val_df)
+        dataset_size = int(len(val_df) * args.val_subset_ratio)
+        subset_rows = random.sample(range(original_dataset_size), k=dataset_size)
+
+        val_df = val_df.iloc[subset_rows]
+        val_df = val_df.reset_index(drop=True)
+
+    if(args.dataset not in ["ol3i", "chexpert"]):
         train_df["Path"] = train_df["Path"].apply(lambda x: os.path.join(img_path, x))
         val_df["Path"] = val_df["Path"].apply(lambda x: os.path.join(img_path, x))
         test_df["Path"] = test_df["Path"].apply(lambda x: os.path.join(img_path, x))

@@ -34,6 +34,20 @@ data:
     val_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OASIS-1/CSVs/new_val.csv'
     test_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/OASIS-1/CSVs/new_test.csv'
 
+  chexpert:
+    root_path: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/CheXpert-v1.0-small'
+    img_path: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/CheXpert-v1.0-small'
+    train_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/CheXpert-v1.0-small/new_train.csv'
+    val_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/CheXpert-v1.0-small/new_val.csv'
+    test_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/CheXpert-v1.0-small/new_test.csv'
+
+  glaucoma:
+    root_path: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/Harvard_glcm'
+    img_path: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/Harvard_glcm/All_files'
+    train_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/Harvard_glcm/new_train.csv'
+    val_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/Harvard_glcm/new_val.csv'
+    test_csv: '/rds/user/co-dutt1/hpc-work/ALL_DATASETS/Harvard_glcm/new_test.csv'
+
   
 
   

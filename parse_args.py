@@ -15,6 +15,18 @@ def get_args_parser(add_help=True):
         help="Dataset for finetuning.",
     )
     parser.add_argument(
+        "--train_subset_ratio",
+        default=None,
+        type=float,
+        help="Subset of the training dataset to be used",
+    )
+    parser.add_argument(
+        "--val_subset_ratio",
+        default=None,
+        type=float,
+        help="Subset of the validation dataset to be used",
+    )
+    parser.add_argument(
         "--dataset_basepath",
         default="/home/co-dutt1/rds/hpc-work/ALL_DATASETS/",
         required=False,
@@ -370,7 +382,7 @@ def get_args_parser(add_help=True):
                         help='Sensitive attribute to be used for fairness')
     parser.add_argument('--age_type', type=str, default='multi', choices=['binary', 'multi'])
     parser.add_argument('--skin_type', type=str, default='multi', choices=['binary', 'multi'])
-    parser.add_argument('--use_metric', type=str, default='acc', choices=['acc', 'auc'])
+    parser.add_argument('--use_metric', type=str, default='auc', choices=['acc', 'auc'])
 
     # HPARAM OPT (HPO) Arguements
     parser.add_argument("--objective_metric", type=str, default="min_acc", choices=["min_acc", "min_auc", "acc_diff", "auc_diff", "max_loss", "overall_acc", "overall_auc"])
@@ -385,6 +397,27 @@ def get_args_parser(add_help=True):
         "--use_multi_objective",
         help="Use multi-objective optimization for HPO",
         action="store_true",
+    )
+
+    # FAIRPRUNE ARGUEMENTS
+    parser.add_argument(
+        "--pruning_ratio",
+        default=0.35,
+        type=float,
+        help="Pruning ratio in FairPrune",
+    )
+    parser.add_argument(
+        "--b_param",
+        default=0.33,
+        type=float,
+        help="Beta Parameter in FairPrune",
+    )
+
+    parser.add_argument(
+        "--cal_equiodds",
+        default=True,
+        type=bool,
+        help="Calculate Equalized odds and DPD",
     )
 
     return parser
