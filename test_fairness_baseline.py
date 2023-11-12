@@ -80,7 +80,7 @@ def create_results_df(args):
                             "Mask Path"
                         ]
                     ) 
-    elif(args.sens_attribute == 'skin_type' or args.sens_attribute == 'age'):
+    elif(args.sens_attribute == 'skin_type' or args.sens_attribute == 'age' or args.sens_attribute == 'race'):
         if(args.use_metric == 'acc'):
             test_results_df = pd.DataFrame(
                     columns=[
@@ -887,6 +887,13 @@ def main(args):
                     print("\n")
                 else:
                     raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
+            
+            elif(args.sens_attribute == 'race'):
+                if(args.cal_equiodds):
+                    val_acc, acc_race0_avg, acc_race1_avg, val_auc, auc_race0_avg, auc_race1_avg, val_loss, val_max_loss, equiodds_diff, equiodds_ratio, dpd, dpr = evaluate_fairness_race_binary(model, criterion, ece_criterion, data_loader_val, args=args, device=device)
+                else:
+                    val_acc, acc_race0_avg, acc_race1_avg, val_auc, auc_race0_avg, auc_race1_avg, val_loss, val_max_loss = evaluate_fairness_race_binary(model, criterion, ece_criterion, data_loader_val, args=args, device=device)
+            
             else:
                 raise NotImplementedError
 
@@ -1172,6 +1179,12 @@ def main(args):
                     print("DPR: ", dpr)
             else:
                 raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
+        
+        elif(args.sens_attribute == 'race'):
+            if(args.cal_equiodds):
+                test_acc, test_acc_type0, test_acc_type1, test_auc, test_auc_type0, test_auc_type1, test_loss, test_max_loss, equiodds_diff, equiodds_ratio, dpd, dpr = evaluate_fairness_race_binary(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
+            else:
+                est_acc, test_acc_type0, test_acc_type1, test_auc, test_auc_type0, test_auc_type1, test_loss, test_max_loss = evaluate_fairness_race_binary(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
         else:
             raise NotImplementedError
 
@@ -1192,7 +1205,6 @@ def main(args):
                 new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, test_male_acc, test_female_acc, round(abs(test_male_acc - test_female_acc), 3), mask_path]
             if(args.use_metric == 'auc'):
                 if(args.cal_equiodds):
-                    print("Saving with equiodds")
                     new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_auc, test_male_auc, test_female_auc, round(abs(test_male_auc - test_female_auc), 3), round(equiodds_diff, 3), round(equiodds_ratio, 3), round(dpd, 3), round(dpr, 3), mask_path]
                 else:
                     new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_auc, test_male_auc, test_female_auc, round(abs(test_male_auc - test_female_auc), 3), mask_path]
@@ -1251,6 +1263,21 @@ def main(args):
                         new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_auc, best_auc, worst_auc, round(abs(best_auc - worst_auc), 3), mask_path]
             else:
                 raise NotImplementedError("Age type not supported. Choose from 'multi' or 'binary'")
+        
+        elif(args.sens_attribute == 'race'):
+            best_acc = max(test_acc_type0, test_acc_type1)
+            worst_acc = min(test_acc_type0, test_acc_type1)
+
+            best_auc = max(test_auc_type0, test_auc_type1)
+            worst_auc = min(test_auc_type0, test_auc_type1)
+
+            if(args.use_metric == 'acc'):
+                new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, best_acc, worst_acc, round(abs(best_acc - worst_acc), 3), mask_path]
+            elif(args.use_metric == 'auc'):
+                if(args.cal_equiodds):
+                    new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_auc, best_auc, worst_auc, round(abs(best_auc - worst_auc), 3), round(equiodds_diff, 3), round(equiodds_ratio, 3), round(dpd, 3), round(dpr, 3), mask_path]
+                else:
+                    new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_auc, best_auc, worst_auc, round(abs(best_auc - worst_auc), 3), mask_path]
         else:
             raise NotImplementedError("Sensitive attribute not implemented")
             

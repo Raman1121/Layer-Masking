@@ -178,24 +178,6 @@ def train_one_epoch_fairness(
                 output, target, sens_attr, topk=(1, args.num_classes)
             )
 
-            ########################################## EquiOpp ########################################
-            # pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
-            # preds = np.argmax(pred_probs, axis=1)
-            # equiopp_0, equiopp_1 = utils.cal_eqopp(pred_probs, target, sens_attr, threshold=0.5)
-            # equiodd = utils.cal_eqodd(pred_probs, target, sens_attr, threshold=0.5)
-
-            # print("EquiOpp 0: ", equiopp_0)
-            # print("EquiOpp 1: ", equiopp_1)
-            # print("EquiOdd: ", equiodd)
-            
-            #eqodd_threh = utils.cal_eqodd(pred_probs, target, sens_attr, threshold = 0.5)
-            # eqodd_at_specif = utils.eqodd_at_specificity(output, target, sens_attr, specificity = 0.8)
-            # eqodd_at_sensit = utils.eqodd_at_sensitivity(output, target, sens_attr, sensitivity = 0.8)
-
-            #print("EqOdd Threshold: ", eqodd_threh)
-            # print("EqOdd at Specificity: ", eqodd_at_specif)
-            # print("EqOdd at Sensitivity: ", eqodd_at_sensit)
-
         elif args.sens_attribute == "skin_type":
             
             if(args.skin_type == 'multi'):
@@ -272,8 +254,24 @@ def train_one_epoch_fairness(
                 auc, auc_type0, auc_type1 = utils.auc_by_age_binary(
                     output, target, sens_attr, topk=(1,)
                 )
+
             else:
                 raise NotImplementedError("Age type not implemented")
+            
+        elif args.sens_attribute == 'race':
+            # Accuracy
+            acc1, res_type0, res_type1 = utils.accuracy_by_race_binary(
+                output, target, sens_attr, topk=(1,)
+            )
+            acc1 = acc1[0]
+            acc_type0 = res_type0[0]
+            acc_type1 = res_type1[0]
+
+            # AUC
+            auc, auc_type0, auc_type1 = utils.auc_by_race_binary(
+                output, target, sens_attr, topk=(1,)
+            )
+            
         else:
             raise NotImplementedError("Sens Attribute not implemented")
 
@@ -510,6 +508,34 @@ def train_one_epoch_fairness(
 
             else:
                 raise NotImplementedError("Age type not implemented")
+        
+        elif args.sens_attribute == 'race':
+            # Accuracy
+            if acc_type0 is not np.nan:
+                metric_logger.meters["acc_Race0"].update(acc_type0.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_Race0"].update(0.0, n=batch_size)
+
+            if acc_type1 is not np.nan: 
+                metric_logger.meters["acc_Race1"].update(acc_type1.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_Race1"].update(0.0, n=batch_size)
+
+            # AUC
+            if auc is not np.nan:
+                metric_logger.meters["auc"].update(auc, n=batch_size)
+            else:
+                metric_logger.meters["auc"].update(0.0, n=0)
+
+            if auc_type0 is not np.nan:
+                metric_logger.meters["auc_Race0"].update(auc_type0, n=batch_size)
+            else:
+                metric_logger.meters["auc_Race0"].update(0.0, n=0)
+            
+            if auc_type1 is not np.nan:
+                metric_logger.meters["auc_Race1"].update(auc_type1, n=batch_size)
+            else:
+                metric_logger.meters["auc_Race1"].update(0.0, n=0)
 
         metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
 
@@ -531,6 +557,7 @@ def train_one_epoch_fairness(
                 worst_acc_avg = min(metric_logger.acc_type0.global_avg, metric_logger.acc_type1.global_avg, metric_logger.acc_type2.global_avg, metric_logger.acc_type3.global_avg, metric_logger.acc_type4.global_avg, metric_logger.acc_type5.global_avg)
                 best_auc_avg = max(metric_logger.auc_type0.global_avg, metric_logger.auc_type1.global_avg, metric_logger.auc_type2.global_avg, metric_logger.auc_type3.global_avg, metric_logger.auc_type4.global_avg, metric_logger.auc_type5.global_avg)
                 worst_auc_avg = min(metric_logger.auc_type0.global_avg, metric_logger.auc_type1.global_avg, metric_logger.auc_type2.global_avg, metric_logger.auc_type3.global_avg, metric_logger.auc_type4.global_avg, metric_logger.auc_type5.global_avg)
+        
         elif(args.sens_attribute == 'age'):
             if(args.age_type == 'binary'):
                 best_acc_avg = max(metric_logger.acc_Age0.global_avg, metric_logger.acc_Age1.global_avg)
@@ -542,6 +569,12 @@ def train_one_epoch_fairness(
                 worst_acc_avg = min(metric_logger.acc_Age0.global_avg, metric_logger.acc_Age1.global_avg, metric_logger.acc_Age2.global_avg, metric_logger.acc_Age3.global_avg, metric_logger.acc_Age4.global_avg)
                 best_auc_avg = max(metric_logger.auc_Age0.global_avg, metric_logger.auc_Age1.global_avg, metric_logger.auc_Age2.global_avg, metric_logger.auc_Age3.global_avg, metric_logger.auc_Age4.global_avg)
                 worst_auc_avg = min(metric_logger.auc_Age0.global_avg, metric_logger.auc_Age1.global_avg, metric_logger.auc_Age2.global_avg, metric_logger.auc_Age3.global_avg, metric_logger.auc_Age4.global_avg)
+        
+        elif(args.sens_attribute == 'race'):
+            best_acc_avg = max(metric_logger.acc_Race0.global_avg, metric_logger.acc_Race1.global_avg)
+            worst_acc_avg = min(metric_logger.acc_Race0.global_avg, metric_logger.acc_Race1.global_avg)
+            best_auc_avg = max(metric_logger.auc_Race0.global_avg, metric_logger.auc_Race1.global_avg)
+            worst_auc_avg = min(metric_logger.auc_Race0.global_avg, metric_logger.auc_Race1.global_avg)
 
         acc_avg = metric_logger.acc1.global_avg
         auc_avg = metric_logger.auc.global_avg
@@ -1887,6 +1920,7 @@ def evaluate_fairness_age_binary(
     
 
     if(args.cal_equiodds):
+        print("CAL EQUIODDS ENABLED")
         return (
             round(acc_avg, 3),
             round(acc_age0_avg, 3),
@@ -1913,6 +1947,203 @@ def evaluate_fairness_age_binary(
             max_val_loss,
         )
 
+def evaluate_fairness_race_binary(
+    model,
+    criterion,
+    ece_criterion,
+    data_loader,
+    device,
+    args,
+    print_freq=100,
+    log_suffix="",
+    **kwargs,
+):
+    print("EVALUATING")
+    model.eval()
+
+    assert args.sens_attribute == "race"
+
+    total_loss_type1 = 0.0
+    total_loss_type2 = 0.0
+
+    num_type1 = 0
+    num_type2 = 0
+
+    metric_logger = utils.MetricLogger(delimiter="  ")
+    header = f"Test: {log_suffix}"
+
+    num_processed_samples = 0
+    with torch.inference_mode():
+        for image, target, sens_attr in metric_logger.log_every(
+            data_loader, print_freq, header
+        ):
+            image = image.to(device, non_blocking=True)
+            target = target.to(device, non_blocking=True)
+            # sens_attr = sens_attr.to(device, non_blocking=True)
+
+            output = model(image)
+            pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+            preds = np.argmax(pred_probs, axis=1)
+            loss = criterion(output, target)
+            ece_loss = ece_criterion(output, target)
+
+            loss_type1 = torch.mean(loss[sens_attr == 0])
+            loss_type2 = torch.mean(loss[sens_attr == 1])
+            
+
+            total_loss_type1 += loss_type1.item()
+            total_loss_type2 += loss_type2.item()
+            
+            num_type1 += torch.sum(sens_attr == 0).item()
+            num_type2 += torch.sum(sens_attr == 1).item()
+            
+            
+            total_losses = [
+                total_loss_type1,
+                total_loss_type2,
+                
+            ]
+            num_samples = [
+                num_type1,
+                num_type2,
+            ]
+
+            avg_losses = []
+            for total_loss, num in zip(total_losses, num_samples):
+                avg_loss = total_loss / num if num > 0 else 0.0
+                avg_losses.append(avg_loss)
+
+            avg_loss_type1 = avg_losses[0]
+            avg_loss_type2 = avg_losses[1]
+
+            # Take the maximum and minimum of all the losses
+            max_val_loss = torch.tensor(
+                max(
+                    avg_loss_type1,
+                    avg_loss_type2,
+                    
+            ))
+            min_val_loss = torch.tensor(
+                min(
+                    avg_loss_type1,
+                    avg_loss_type2,
+                    
+            ))
+
+            diff_loss = torch.abs(max_val_loss - min_val_loss)
+
+            batch_size = image.shape[0]
+
+            # Accuracy
+            acc1, res_type0, res_type1 = utils.accuracy_by_race_binary(
+                output, target, sens_attr, topk=(1,)
+            )
+            acc1 = acc1[0]
+            try:
+                acc_type0 = res_type0[0]
+            except:
+                acc_type0 = torch.tensor(0.0)
+            try:
+                acc_type1 = res_type1[0]
+            except:
+                acc_type1 = torch.tensor(0.0)
+            acc1_orig, acc5 = utils.accuracy(output, target, topk=(1, args.num_classes))
+
+            # AUC
+            auc, auc_type0, auc_type1 = utils.auc_by_race_binary(
+                output, target, sens_attr, topk=(1,)
+            )
+
+            if auc != np.nan:
+                metric_logger.meters["auc"].update(auc, n=batch_size)
+            if auc_type0 != np.nan:
+                metric_logger.meters["auc_Race0"].update(auc_type0, n=batch_size)
+            if auc_type1 != np.nan:
+                metric_logger.meters["auc_Race1"].update(auc_type1, n=batch_size)
+
+            # Equalized Odds and Equalized Opportunity
+            equiodd_diff = utils.equiodds_difference(preds, target, sens_attr)
+            equiodd_ratio = utils.equiodds_ratio(preds, target, sens_attr)
+
+            # Demographic Parity Difference and Ratio
+            dpd = utils.dpd(preds, target, sens_attr)
+            dpr = utils.dpr(preds, target, sens_attr)
+
+            
+            metric_logger.update(loss=torch.mean(loss).item())
+            metric_logger.update(ece_loss=ece_loss.item())
+            metric_logger.update(max_val_loss=max_val_loss)
+            metric_logger.update(diff_loss=diff_loss)
+            metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
+            metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+            metric_logger.meters["acc_Race0"].update(acc_type0.item(), n=batch_size)
+            metric_logger.meters["acc_Race1"].update(acc_type1.item(), n=batch_size)
+
+            if equiodd_diff is not np.nan:
+                metric_logger.meters["equiodd_diff"].update(equiodd_diff, n=batch_size)
+            if equiodd_ratio is not np.nan:
+                metric_logger.meters["equiodd_ratio"].update(equiodd_ratio, n=batch_size)
+
+            if dpd is not np.nan:
+                metric_logger.meters["dpd"].update(dpd, n=batch_size)
+            if dpr is not np.nan:
+                metric_logger.meters["dpr"].update(dpr, n=batch_size)
+
+            metric_logger.meters["max_val_loss"].update(max_val_loss, n=batch_size)
+            metric_logger.meters["diff_loss"].update(diff_loss, n=batch_size)
+            num_processed_samples += batch_size
+
+    metric_logger.synchronize_between_processes()
+
+    print(
+        f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f} Max Loss {metric_logger.max_val_loss.global_avg:.3f} Diff Loss {metric_logger.diff_loss.global_avg:.3f}"
+    )
+    # return metric_logger.acc1.global_avg, loss, max_val_loss, metric_logger.acc1_male.global_avg, metric_logger.acc1_female.global_avg
+    # TODO: Use a different return statement here
+
+    acc_avg = metric_logger.acc1.global_avg
+    acc_race0_avg = metric_logger.acc_Race0.global_avg
+    acc_race1_avg = metric_logger.acc_Race1.global_avg
+
+    auc_avg = metric_logger.auc.global_avg
+    auc_race0_avg = metric_logger.auc_Race0.global_avg
+    auc_race1_avg = metric_logger.auc_Race1.global_avg
+
+    # Equalized Odds and Equalized Opportunity
+    avg_e_diff = metric_logger.equiodd_diff.global_avg
+    avg_e_ratio = metric_logger.equiodd_ratio.global_avg
+
+    avg_dpd = metric_logger.dpd.global_avg
+    avg_dpr = metric_logger.dpr.global_avg
+    
+
+    if(args.cal_equiodds):
+        print("CAL EQUIODDS ENABLED")
+        return (
+            round(acc_avg, 3),
+            round(acc_race0_avg, 3),
+            round(acc_race1_avg, 3),
+            round(auc_avg, 3),
+            round(auc_race0_avg, 3),
+            round(auc_race1_avg, 3),
+            loss,
+            max_val_loss,
+            avg_e_diff,
+            avg_e_ratio,
+            avg_dpd,
+            avg_dpr
+        )
+    else:
+        return (
+            round(acc_avg, 3),
+            round(acc_race0_avg, 3),
+            round(acc_race1_avg, 3),
+            round(auc_avg, 3),
+            round(auc_race0_avg, 3),
+            round(auc_race1_avg, 3),
+            loss,
+            max_val_loss,
+        )
 
 def _get_cache_path(filepath):
     import hashlib

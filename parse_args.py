@@ -415,8 +415,7 @@ def get_args_parser(add_help=True):
 
     parser.add_argument(
         "--cal_equiodds",
-        default=True,
-        type=bool,
+        action='store_true',
         help="Calculate Equalized odds and DPD",
     )
 
