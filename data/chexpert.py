@@ -10,13 +10,14 @@ import yaml
 from PIL import Image
 
 class ChexpertDataset(Dataset):
-    def __init__(self, df, sens_attribute=None, transform=None):
+    def __init__(self, df, sens_attribute=None, transform=None, age_type='binary'):
 
         assert sens_attribute is not None
 
         self.df = df
         self.transform = transform
         self.sens_attribute = sens_attribute
+        self.age_type = age_type
         self.classes = self.get_num_classes()
         self.class_to_idx = self._get_class_to_idx()
 
@@ -39,8 +40,12 @@ class ChexpertDataset(Dataset):
         if(self.sens_attribute == 'gender'):
             sens_attribute = self.df.iloc[idx]['Sex']
         elif(self.sens_attribute == 'age'):
-            #sens_attribute = self.df.iloc[idx]['Age_multi']
-            sens_attribute = self.df.iloc[idx]['Age_binary']
+            if(self.age_type == 'multi'):
+                sens_attribute = self.df.iloc[idx]['Age_multi']
+            elif(self.age_type == 'binary'):
+                sens_attribute = self.df.iloc[idx]['Age_binary']
+        elif(self.sens_attribute == 'age_sex'):
+            sens_attribute = self.df.iloc[idx]['Multi_age_multi_sens']
 
         if self.transform:
             image = self.transform(image)

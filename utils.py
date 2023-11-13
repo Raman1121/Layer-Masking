@@ -422,6 +422,13 @@ def get_timm_model(encoder, num_classes, **kwargs):
     pretrained = kwargs["pretrained"] if "pretrained" in kwargs else True
     print("Pretrained: ", pretrained)
 
+    if encoder == "resnet50":
+        model = timm.create_model(
+            "resnet50",
+            pretrained=pretrained,
+            num_classes=num_classes,
+        )
+
     if encoder == "vit_base":
         model = timm.create_model(
             "vit_base_patch16_224",
@@ -1375,7 +1382,6 @@ def auc_by_age(output, target, sens_attribute, topk=(1,)):
             type0_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 0]
             type0_output = output_with_softmax[type0_indices]
             type0_target = target[type0_indices]
-            print(type0_target.shape)
             type0_score = sklm.roc_auc_score(type0_target, type0_output, multi_class='ovr')
         except:
             #import pdb; pdb.set_trace()
@@ -1504,6 +1510,134 @@ def auc_by_age_binary(output, target, sens_attribute, topk=(1,)):
 
         return score, type0_score, type1_score
 
+
+def accuracy_by_age_sex(output, target, sens_attribute, topk=(1,)):
+    """Computes the accuracy over the k top predictions for the specified values of k
+       for the whole dataset and different age groups separately.
+    """
+    with torch.inference_mode():
+        maxk = max(topk)
+        batch_size = target.size(0)
+        if target.ndim == 2:
+            target = target.max(dim=1)[1]
+
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target[None])
+
+        # Calculate accuracy for the whole dataset
+        res = []
+        for k in topk:
+            correct_k = correct[:k].flatten().sum(dtype=torch.float32)
+            res.append(correct_k * (100.0 / batch_size))
+
+        # Calculate accuracy for the each age group
+        type0_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 0]
+        type0_correct = correct[:, type0_indices]
+        res_type0 = []
+        for k in topk:
+            correct_k = type0_correct[:k].flatten().sum(dtype=torch.float32)
+            try:
+                res_type0.append(correct_k * (100.0 / len(type0_indices)))
+            except:
+                res_type0.append(torch.tensor(0.0))
+
+        type1_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 1]
+        type1_correct = correct[:, type1_indices]
+        res_type1 = []
+        for k in topk:
+            correct_k = type1_correct[:k].flatten().sum(dtype=torch.float32)
+            try:    
+                res_type1.append(correct_k * (100.0 / len(type1_indices)))
+            except:
+                res_type1.append(torch.tensor(0.0))
+
+        type2_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 2]
+        type2_correct = correct[:, type2_indices]
+        res_type2 = []
+        for k in topk:
+            correct_k = type2_correct[:k].flatten().sum(dtype=torch.float32)
+            try:
+                res_type2.append(correct_k * (100.0 / len(type2_indices)))
+            except:
+                res_type2.append(torch.tensor(0.0))
+
+        type3_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 3]
+        type3_correct = correct[:, type3_indices]
+        res_type3 = []
+        for k in topk:
+            correct_k = type3_correct[:k].flatten().sum(dtype=torch.float32)
+            try:
+                res_type3.append(correct_k * (100.0 / len(type3_indices)))
+            except:
+                res_type3.append(torch.tensor(0.0))
+
+
+                
+        return res, res_type0, res_type1, res_type2, res_type3
+
+def auc_by_age_sex(output, target, sens_attribute, topk=(1,)):
+
+    with torch.inference_mode():
+        maxk = max(topk)
+        batch_size = target.size(0)
+        if target.ndim == 2:
+            target = target.max(dim=1)[1]
+
+        maxk = 1
+        pos_label = 1
+
+        output_with_softmax = torch.softmax(output, dim=1).cpu().detach().data.numpy()
+        target = target.cpu().detach().data
+
+        # If it is a binary classification, we need to convert the output to a shape (n_samples,). More info: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_auc_score.html
+        if(output_with_softmax.shape[1] == 2):
+            output_with_softmax = output_with_softmax[:, 1]
+
+        # Calculate auc for the whole dataset
+        try:
+            score = sklm.roc_auc_score(target, output_with_softmax, multi_class='ovr')
+        except:
+            #import pdb; pdb.set_trace()
+            score = np.nan
+
+        # Calculate AUC for the each age group
+        try:
+            type0_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 0]
+            type0_output = output_with_softmax[type0_indices]
+            type0_target = target[type0_indices]
+            type0_score = sklm.roc_auc_score(type0_target, type0_output, multi_class='ovr')
+        except:
+            #import pdb; pdb.set_trace()
+            type0_score = np.nan
+
+        try:
+            type1_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 1]
+            type1_output = output_with_softmax[type1_indices]
+            type1_target = target[type1_indices]
+            type1_score = sklm.roc_auc_score(type1_target, type1_output, multi_class='ovr')
+        except:
+            type1_score = np.nan
+        
+        try:
+            type2_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 2]
+            type2_output = output_with_softmax[type2_indices]
+            type2_target = target[type2_indices]
+            type2_score = sklm.roc_auc_score(type2_target, type2_output, multi_class='ovr')
+        except:
+            type2_score = np.nan
+
+        try:
+            type3_indices = [i for i, _age_group in enumerate(sens_attribute) if _age_group == 3]
+            type3_output = output_with_softmax[type3_indices]
+            type3_target = target[type3_indices]
+            type3_score = sklm.roc_auc_score(type3_target, type3_output, multi_class='ovr')
+        except:
+            type3_score = np.nan
+
+
+        return score, type0_score, type1_score, type2_score, type3_score
+
 def accuracy_by_race_binary(output, target, sens_attribute, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k
        for the whole dataset and different age groups separately.
@@ -1598,7 +1732,7 @@ def auc_by_race_binary(output, target, sens_attribute, topk=(1,)):
 def equiodds_difference(preds, labels, attrs):
     print("Preds: ", np.unique(preds))
     print("Labels: ", np.unique(labels.cpu()))
-    print("Attrs: ", np.unique(attrs))
+    print("Attrs: ", np.unique(attrs, return_counts=True))
     print("\n")
     return round(equalized_odds_difference(
                                 labels.cpu(),

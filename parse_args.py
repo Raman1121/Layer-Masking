@@ -419,4 +419,37 @@ def get_args_parser(add_help=True):
         help="Calculate Equalized odds and DPD",
     )
 
+    # FSCL ARGUEMENTS
+    parser.add_argument(
+        "--temperature",
+        default=0.07,
+        type=float,
+        help="Temperature Parameter in FSCL",
+    )
+    parser.add_argument(
+        "--contrast_mode",
+        default='all',
+        type=str,
+        help="Contrast Mode in FSCL",
+    )
+    parser.add_argument(
+        "--base_temperature",
+        default=0.07,
+        type=float,
+        help="Temperature Parameter in FSCL",
+    )
+    parser.add_argument('--group_norm', type=int, default=0, help='group normalization')
+
+    parser.add_argument('--method', type=str, default='FSCL',
+                        choices=['FSCL','FSCL*','SupCon', 'SimCLR'], help='choose method')
+
+    
+    # HAM10000 LABELS
+    parser.add_argument(
+        "--label_type",
+        default='binary',
+        type=str,
+        help="Binary/ Multi labels to be used",
+    )
+
     return parser

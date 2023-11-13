@@ -10,7 +10,7 @@ import yaml
 from PIL import Image
 
 class HAM10000Dataset(Dataset):
-    def __init__(self, df, sens_attribute, transform=None, age_type='multi'):
+    def __init__(self, df, sens_attribute, transform=None, age_type='multi', label_type='binary'):
 
         assert sens_attribute is not None
 
@@ -18,6 +18,7 @@ class HAM10000Dataset(Dataset):
         self.transform = transform
         self.sens_attribute = sens_attribute
         self.age_type = age_type
+        self.label_type = label_type
         #self.use_binary_label = use_binary_label
         self.classes = self.get_num_classes()
         self.class_to_idx = self._get_class_to_idx()
@@ -27,7 +28,10 @@ class HAM10000Dataset(Dataset):
     
     def get_num_classes(self):
         #return self.df['dx_index'].unique()
-        return self.df['binaryLabel'].unique()
+        if(self.label_type == 'multi'):
+            return self.df['MultiLabels'].unique()
+        else:
+            return self.df['binaryLabel'].unique()
 
     def _get_original_labels(self):
         return {'akiec':"Bowen's disease",
@@ -51,7 +55,11 @@ class HAM10000Dataset(Dataset):
         image = read_image(self.df.iloc[idx]['Path'], mode=ImageReadMode.RGB)
         image = T.ToPILImage()(image)
         #label = torch.tensor(self.df.iloc[idx]['dx_index'])
-        label = torch.tensor(self.df.iloc[idx]['binaryLabel'])
+
+        if(self.label_type == 'multi'):
+            label = torch.tensor(self.df.iloc[idx]['MultiLabels'])
+        else:
+            label = torch.tensor(self.df.iloc[idx]['binaryLabel'])
 
         #print("LABEL: ", label)
 
@@ -59,7 +67,7 @@ class HAM10000Dataset(Dataset):
             sens_attribute = self.df.iloc[idx]['sex']
         elif(self.sens_attribute == 'age'):
             if(self.age_type == 'multi'):
-                sens_attribute = self.df.iloc[idx]['Age_multi']
+                sens_attribute = self.df.iloc[idx]['Age_multi2']
             elif(self.age_type == 'binary'):
                 sens_attribute = self.df.iloc[idx]['Age_binary']
         else:

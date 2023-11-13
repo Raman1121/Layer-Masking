@@ -80,18 +80,11 @@ def create_results_df(args):
                             "Mask Path"
                         ]
                     ) 
-    elif(args.sens_attribute == 'skin_type' or args.sens_attribute == 'age' or args.sens_attribute == 'race'):
+    elif(args.sens_attribute == 'skin_type' or args.sens_attribute == 'age' or args.sens_attribute == 'race' or args.sens_attribute == 'age_sex'):
         if(args.use_metric == 'acc'):
             test_results_df = pd.DataFrame(
                     columns=[
-                        "Tuning Method",
-                        "Train Percent",
-                        "LR",
-                        "Test Acc Overall",
-                        "Test Acc (Best)",
-                        "Test Acc (Worst)",
-                        "Test Acc Difference",
-                        "Mask Path"
+                        "Tuning Method","Train Percent", "LR", "Test Acc Overall", "Test Acc (Best)", "Test Acc (Worst)", "Test Acc Difference", "Mask Path"
                     ]
                 )  
         elif(args.use_metric == 'auc'):
@@ -148,38 +141,6 @@ def plot_auc(args, AUC_list, best_AUC_list, worst_AUC_list, is_train):
     for i in range(len(ALL_AUC)):
         ALL_AUC_DIFF.append(ALL_BEST_AUC[i] - ALL_WORST_AUC[i])
 
-    # if(is_train):
-    #     figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'training.png'
-    #     label1 = 'Train AUC'
-    #     label2 = 'Train Best AUC'
-    #     label3 = 'Train Worst AUC'
-    #     title = 'Overall, Best and Worst Sub-group Training AUC'
-    # else:
-    #     figname = args.dataset + '_' + args.tuning_method + '_' + args.sens_attribute + '_' + 'validation.png'
-    #     label1 = 'Val AUC'
-    #     label2 = 'Val Best AUC'
-    #     label3 = 'Val Worst AUC'
-    #     title = 'Overall, Best and Worst Sub-group Validation AUC'
-
-    # # Plot the validation AUC, best and worst AUC in the same figure as a line plot
-    # plt.figure(figsize=(10, 10))
-    # plt.plot(ALL_AUC, label=label1)
-    # plt.plot(ALL_BEST_AUC, label=label2)
-    # plt.plot(ALL_WORST_AUC, label=label3)
-    # plt.plot(ALL_AUC_DIFF, label='AUC Difference')
-    # plt.xlabel('Epochs')
-    # plt.ylabel('AUC')
-    # plt.title(title)
-    # plt.xticks(list(range(len(ALL_WORST_AUC))))
-    # plt.legend()
-    # plt.savefig(os.path.join(args.fig_savepath, figname))
-
-    # if(is_train):
-    #     print("Training AUC Plot saved at: ", os.path.join(args.fig_savepath, figname))
-    # else:
-    #     print("Validation AUC Plot saved at: ", os.path.join(args.fig_savepath, figname))
-
-    # plt.close()
 
     # Save the validation ACC, best and worst ACC as json_files
     if(is_train):
@@ -610,31 +571,27 @@ def main(args):
             elif args.sens_attribute == "skin_type":
 
                 if(args.skin_type == 'multi'):
-                    (
-                        val_acc,
-                        val_acc_type0,
-                        val_acc_type1,
-                        val_acc_type2,
-                        val_acc_type3,
-                        val_acc_type4,
-                        val_acc_type5,
-                        val_auc,
-                        val_auc_type0,
-                        val_auc_type1,
-                        val_auc_type2,
-                        val_auc_type3,
-                        val_auc_type4,
-                        val_auc_type5,
-                        val_loss,
-                        val_max_loss
-                    ) = evaluate_fairness_skin_type(
-                        model,
-                        criterion,
-                        ece_criterion,
-                        data_loader_val,
-                        args=args,
-                        device=device,
-                    )
+                    if(args.cal_equiodds):
+                        (
+                            val_acc, val_acc_type0, val_acc_type1, val_acc_type2, val_acc_type3, val_acc_type4, val_acc_type5, val_auc, val_auc_type0, val_auc_type1, val_auc_type2, val_auc_type3, val_auc_type4, val_auc_type5, val_loss, val_max_loss, equiodds_diff,  equiodds_ratio,  dpd,  dpr
+                        ) = evaluate_fairness_skin_type(
+                            model,
+                            criterion,
+                            ece_criterion,
+                            data_loader_val,
+                            args=args,
+                            device=device,
+                        )
+                    else:
+                        (val_acc, val_acc_type0, val_acc_type1, val_acc_type2, val_acc_type3, val_acc_type4, val_acc_type5, val_auc, val_auc_type0, val_auc_type1, val_auc_type2, val_auc_type3, val_auc_type4, val_auc_type5, val_loss, val_max_loss
+                        ) = evaluate_fairness_skin_type(
+                            model,
+                            criterion,
+                            ece_criterion,
+                            data_loader_val,
+                            args=args,
+                            device=device,
+                        )
 
                     best_val_acc = max(val_acc_type0, val_acc_type1, val_acc_type2, val_acc_type3, val_acc_type4, val_acc_type5)
                     worst_val_acc = min(val_acc_type0, val_acc_type1, val_acc_type2, val_acc_type3, val_acc_type4, val_acc_type5)
@@ -752,29 +709,58 @@ def main(args):
 
             elif args.sens_attribute == "age":
                 if(args.age_type == 'multi'):
-                    (
-                        val_acc,
-                        acc_age0_avg,
-                        acc_age1_avg,
-                        acc_age2_avg,
-                        acc_age3_avg,
-                        acc_age4_avg,
-                        val_auc,
-                        auc_age0_avg,
-                        auc_age1_avg,
-                        auc_age2_avg,
-                        auc_age3_avg,
-                        auc_age4_avg,
-                        val_loss,
-                        val_max_loss
-                    ) = evaluate_fairness_age(
-                        model,
-                        criterion,
-                        ece_criterion,
-                        data_loader_val,
-                        args=args,
-                        device=device,
-                    )
+                    if(args.cal_equiodds):
+                            (
+                            val_acc,
+                            acc_age0_avg,
+                            acc_age1_avg,
+                            acc_age2_avg,
+                            acc_age3_avg,
+                            acc_age4_avg,
+                            val_auc,
+                            auc_age0_avg,
+                            auc_age1_avg,
+                            auc_age2_avg,
+                            auc_age3_avg,
+                            auc_age4_avg,
+                            val_loss,
+                            val_max_loss,
+                            equiodds_diff,
+                            equiodds_ratio,
+                            dpd,
+                            dpr
+                        ) = evaluate_fairness_age(
+                            model,
+                            criterion,
+                            ece_criterion,
+                            data_loader_val,
+                            args=args,
+                            device=device,
+                        )
+                    else:
+                        (
+                            val_acc,
+                            acc_age0_avg,
+                            acc_age1_avg,
+                            acc_age2_avg,
+                            acc_age3_avg,
+                            acc_age4_avg,
+                            val_auc,
+                            auc_age0_avg,
+                            auc_age1_avg,
+                            auc_age2_avg,
+                            auc_age3_avg,
+                            auc_age4_avg,
+                            val_loss,
+                            val_max_loss
+                        ) = evaluate_fairness_age(
+                            model,
+                            criterion,
+                            ece_criterion,
+                            data_loader_val,
+                            args=args,
+                            device=device,
+                        )
 
                     best_val_acc = max(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
                     worst_val_acc = min(acc_age0_avg, acc_age1_avg, acc_age2_avg, acc_age3_avg, acc_age4_avg)
@@ -894,8 +880,69 @@ def main(args):
                 else:
                     val_acc, acc_race0_avg, acc_race1_avg, val_auc, auc_race0_avg, auc_race1_avg, val_loss, val_max_loss = evaluate_fairness_race_binary(model, criterion, ece_criterion, data_loader_val, args=args, device=device)
             
+            elif(args.sens_attribute == 'age_sex'):
+                assert args.dataset == 'chexpert'
+
+                if(args.cal_equiodds):
+                    (
+                        val_acc, val_acc_type0, val_acc_type1, val_acc_type2, val_acc_type3, val_auc, val_auc_type0, val_auc_type1, val_auc_type2, val_auc_type3, val_loss, val_max_loss, equiodds_diff,  equiodds_ratio,  dpd,  dpr
+                    ) = evaluate_fairness_age_sex(
+                        model,
+                        criterion,
+                        ece_criterion,
+                        data_loader_val,
+                        args=args,
+                        device=device,
+                    )
+                else:
+                    (val_acc, val_acc_type0, val_acc_type1, val_acc_type2, val_acc_type3, val_auc, val_auc_type0, val_auc_type1, val_auc_type2, val_auc_type3, val_loss, val_max_loss
+                    ) = evaluate_fairness_age_sex(
+                        model,
+                        criterion,
+                        ece_criterion,
+                        data_loader_val,
+                        args=args,
+                        device=device,
+                    )
+
+                best_val_acc = max(val_acc_type0, val_acc_type1, val_acc_type2, val_acc_type3)
+                worst_val_acc = min(val_acc_type0, val_acc_type1, val_acc_type2, val_acc_type3)
+
+                best_val_auc = max(val_auc_type0, val_auc_type1, val_auc_type2, val_auc_type3)
+                worst_val_auc = min(val_auc_type0, val_auc_type1, val_auc_type2, val_auc_type3)
+
+                ALL_VAL_AUC.append(val_auc)
+                ALL_VAL_BEST_AUC.append(best_val_auc)
+                ALL_VAL_WORST_AUC.append(worst_val_auc)
+
+                ALL_VAL_ACC.append(val_acc)
+                ALL_VAL_BEST_ACC.append(best_val_acc)
+                ALL_VAL_WORST_ACC.append(worst_val_acc)
+
+                print(
+                        "Val Acc: {:.2f}, Val Young Male Acc: {:.2f}, Val Old Male Acc: {:.2f}, Val Young Female Acc: {:.2f}, Val Old Female Acc: {:.2f}, Val Loss: {:.2f}, Val MAX LOSS: {:.2f}".format(
+                            val_acc,
+                            val_acc_type0,
+                            val_acc_type1,
+                            val_acc_type2,
+                            val_acc_type3,
+                            torch.mean(val_loss),
+                            val_max_loss,
+                        )
+                    )
+                print(
+                    "Val AUC: {:.2f}, Val Young Male AUC: {:.2f}, Val Old Male AUC: {:.2f}, Val Young Female AUC: {:.2f}, Val Old Female AUC: {:.2f}".format(
+                        val_auc,
+                        val_auc_type0,
+                        val_auc_type1,
+                        val_auc_type2,
+                        val_auc_type3,
+                    )
+                )
+                print("\n")
+
             else:
-                raise NotImplementedError
+                raise NotImplementedError("Sensitive attribute not implemented")
 
             if args.output_dir:
                 checkpoint = {
@@ -983,31 +1030,62 @@ def main(args):
 
         elif args.sens_attribute == "skin_type":
             if(args.skin_type == 'multi'):
-                (
-                    test_acc,
-                    test_acc_type0,
-                    test_acc_type1,
-                    test_acc_type2,
-                    test_acc_type3,
-                    test_acc_type4,
-                    test_acc_type5,
-                    test_auc,
-                    test_auc_type0,
-                    test_auc_type1,
-                    test_auc_type2,
-                    test_auc_type3,
-                    test_auc_type4,
-                    test_auc_type5,
-                    test_loss,
-                    test_max_loss,
-                ) = evaluate_fairness_skin_type(
-                    model,
-                    criterion,
-                    ece_criterion,
-                    data_loader_test,
-                    args=args,
-                    device=device,
-                )
+                if(args.cal_equiodds):
+                    (
+                        test_acc,
+                        test_acc_type0,
+                        test_acc_type1,
+                        test_acc_type2,
+                        test_acc_type3,
+                        test_acc_type4,
+                        test_acc_type5,
+                        test_auc,
+                        test_auc_type0,
+                        test_auc_type1,
+                        test_auc_type2,
+                        test_auc_type3,
+                        test_auc_type4,
+                        test_auc_type5,
+                        test_loss,
+                        test_max_loss,
+                        equiodds_diff, 
+                        equiodds_ratio, 
+                        dpd, 
+                        dpr
+                    ) = evaluate_fairness_skin_type(
+                        model,
+                        criterion,
+                        ece_criterion,
+                        data_loader_test,
+                        args=args,
+                        device=device,
+                    )
+                else:
+                    (
+                        test_acc,
+                        test_acc_type0,
+                        test_acc_type1,
+                        test_acc_type2,
+                        test_acc_type3,
+                        test_acc_type4,
+                        test_acc_type5,
+                        test_auc,
+                        test_auc_type0,
+                        test_auc_type1,
+                        test_auc_type2,
+                        test_auc_type3,
+                        test_auc_type4,
+                        test_auc_type5,
+                        test_loss,
+                        test_max_loss,
+                    ) = evaluate_fairness_skin_type(
+                        model,
+                        criterion,
+                        ece_criterion,
+                        data_loader_test,
+                        args=args,
+                        device=device,
+                    )
                 print("\n")
                 print("Overall Test accuracy: ", test_acc)
                 print("Test Type 0 Accuracy: ", test_acc_type0)
@@ -1084,29 +1162,26 @@ def main(args):
 
         elif(args.sens_attribute == 'age'):
             if(args.age_type == 'multi'):
-                (
-                    test_acc,
-                    test_acc_type0,
-                    test_acc_type1,
-                    test_acc_type2,
-                    test_acc_type3,
-                    test_acc_type4,
-                    test_auc,
-                    test_auc_type0,
-                    test_auc_type1,
-                    test_auc_type2,
-                    test_auc_type3,
-                    test_auc_type4,
-                    test_loss,
-                    test_max_loss,
-                ) = evaluate_fairness_age(
-                    model,
-                    criterion,
-                    ece_criterion,
-                    data_loader_test,
-                    args=args,
-                    device=device,
-                )
+                if(args.cal_equiodds):
+                        (test_acc,test_acc_type0,test_acc_type1,test_acc_type2,test_acc_type3,test_acc_type4,test_auc,test_auc_type0,test_auc_type1,test_auc_type2,test_auc_type3,test_auc_type4,test_loss,test_max_loss,equiodds_diff,equiodds_ratio,dpd,dpr
+                    ) = evaluate_fairness_age(
+                        model,
+                        criterion,
+                        ece_criterion,
+                        data_loader_test,
+                        args=args,
+                        device=device,
+                    )
+                else:
+                    (test_acc, test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_acc_type4, test_auc, test_auc_type0, test_auc_type1, test_auc_type2, test_auc_type3, test_auc_type4, test_loss, test_max_loss,
+                    ) = evaluate_fairness_age(
+                        model,
+                        criterion,
+                        ece_criterion,
+                        data_loader_test,
+                        args=args,
+                        device=device,
+                    )
                 print("\n")
                 print("Overall Test  accuracy: ", test_acc)
                 print("Test Age Group 0 Accuracy: ", test_acc_type0)
@@ -1121,6 +1196,13 @@ def main(args):
                 print("Test Age Group 2 AUC: ", test_auc_type2)
                 print("Test Age Group 3 AUC: ", test_auc_type3)
                 print("Test Age Group 4 AUC: ", test_auc_type4)
+
+                if(args.cal_equiodds):
+                    print("\n")
+                    print("EquiOdds Difference: ", equiodds_diff)
+                    print("EquiOdds Ratio: ", equiodds_ratio)
+                    print("DPD: ", dpd)
+                    print("DPR: ", dpr)
 
             elif(args.age_type == 'binary'):
                 if(args.cal_equiodds):
@@ -1185,6 +1267,48 @@ def main(args):
                 test_acc, test_acc_type0, test_acc_type1, test_auc, test_auc_type0, test_auc_type1, test_loss, test_max_loss, equiodds_diff, equiodds_ratio, dpd, dpr = evaluate_fairness_race_binary(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
             else:
                 est_acc, test_acc_type0, test_acc_type1, test_auc, test_auc_type0, test_auc_type1, test_loss, test_max_loss = evaluate_fairness_race_binary(model, criterion, ece_criterion, data_loader_test, args=args, device=device)
+
+        elif(args.sens_attribute == 'age_sex'):
+            if(args.cal_equiodds):
+                (test_acc,test_acc_type0,test_acc_type1,test_acc_type2,test_acc_type3,test_auc,test_auc_type0,test_auc_type1,test_auc_type2,test_auc_type3,test_loss,test_max_loss,equiodds_diff,equiodds_ratio,dpd,dpr
+            ) = evaluate_fairness_age_sex(
+                model,
+                criterion,
+                ece_criterion,
+                data_loader_test,
+                args=args,
+                device=device,
+            )
+            else:
+                (test_acc, test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3, test_auc, test_auc_type0, test_auc_type1, test_auc_type2, test_auc_type3, test_loss, test_max_loss,
+                ) = evaluate_fairness_age_sex(
+                    model,
+                    criterion,
+                    ece_criterion,
+                    data_loader_test,
+                    args=args,
+                    device=device,
+                )
+
+            print("\n")
+            print("Overall Test  accuracy: ", test_acc)
+            print("Test Young Male Accuracy: ", test_acc_type0)
+            print("Test Old Male Accuracy: ", test_acc_type1)
+            print("Test Young Female Accuracy: ", test_acc_type2)
+            print("Test Old Female Accuracy: ", test_acc_type3)
+            print("\n")
+            print("Overall Test AUC: ", test_auc)
+            print("Test Young Male AUC: ", test_auc_type0)
+            print("Test Old Male AUC: ", test_auc_type1)
+            print("Test Young Female AUC: ", test_auc_type2)
+            print("Test Old Female AUC: ", test_auc_type3)
+
+            if(args.cal_equiodds):
+                print("\n")
+                print("EquiOdds Difference: ", equiodds_diff)
+                print("EquiOdds Ratio: ", equiodds_ratio)
+                print("DPD: ", dpd)
+                print("DPR: ", dpr)
         else:
             raise NotImplementedError
 
@@ -1242,9 +1366,15 @@ def main(args):
                 worst_auc = min(test_auc_type0, test_auc_type1, test_auc_type2, test_auc_type3, test_auc_type4)
 
                 if(args.use_metric == 'acc'):
-                    new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, best_acc, worst_acc, round(abs(best_acc - worst_acc), 3), mask_path]
+                    if(args.cal_equiodds):
+                        new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, best_acc, worst_acc, round(abs(best_acc - worst_acc), 3), round(equiodds_diff, 3), round(equiodds_ratio, 3), round(dpd, 3), round(dpr, 3), mask_path]
+                    else:
+                        new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, best_acc, worst_acc, round(abs(best_acc - worst_acc), 3), mask_path]
                 if(args.use_metric == 'auc'):
-                    new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_auc, best_auc, worst_auc, round(abs(best_auc - worst_auc), 3), mask_path]
+                    if(args.cal_equiodds):
+                        new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_auc, best_auc, worst_auc, round(abs(best_auc - worst_auc), 3), round(equiodds_diff, 3), round(equiodds_ratio, 3), round(dpd, 3), round(dpr, 3), mask_path]
+                    else:
+                        new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_auc, best_auc, worst_auc, round(abs(best_auc - worst_auc), 3), mask_path]
                         
             elif(args.age_type == 'binary'):
                 best_acc = max(test_acc_type0, test_acc_type1)
@@ -1278,6 +1408,24 @@ def main(args):
                     new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_auc, best_auc, worst_auc, round(abs(best_auc - worst_auc), 3), round(equiodds_diff, 3), round(equiodds_ratio, 3), round(dpd, 3), round(dpr, 3), mask_path]
                 else:
                     new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_auc, best_auc, worst_auc, round(abs(best_auc - worst_auc), 3), mask_path]
+        
+        elif(args.sens_attribute == 'age_sex'):
+            best_acc = max(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3)
+            worst_acc = min(test_acc_type0, test_acc_type1, test_acc_type2, test_acc_type3)
+            best_auc = max(test_auc_type0, test_auc_type1, test_auc_type2, test_auc_type3)
+            worst_auc = min(test_auc_type0, test_auc_type1, test_auc_type2, test_auc_type3)
+
+            if(args.use_metric == 'acc'):
+                if(args.cal_equiodds):
+                    new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, best_acc, worst_acc, round(abs(best_acc - worst_acc), 3), round(equiodds_diff, 3), round(equiodds_ratio, 3), round(dpd, 3), round(dpr, 3), mask_path]
+                else:
+                    new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_acc, best_acc, worst_acc, round(abs(best_acc - worst_acc), 3), mask_path]
+            if(args.use_metric == 'auc'):
+                if(args.cal_equiodds):
+                    new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_auc, best_auc, worst_auc, round(abs(best_auc - worst_auc), 3), round(equiodds_diff, 3), round(equiodds_ratio, 3), round(dpd, 3), round(dpr, 3), mask_path]
+                else:
+                    new_row2 = [args.tuning_method, round(trainable_percentage, 3), args.lr, test_auc, best_auc, worst_auc, round(abs(best_auc - worst_auc), 3), mask_path]
+        
         else:
             raise NotImplementedError("Sensitive attribute not implemented")
             
