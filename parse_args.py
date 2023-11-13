@@ -421,6 +421,16 @@ def get_args_parser(add_help=True):
 
     # FSCL ARGUEMENTS
     parser.add_argument(
+        "--fscl",
+        action='store_true',
+        help="To perform FSCL",
+    )
+    parser.add_argument(
+        "--fscl_eval",
+        action='store_true',
+        help="To perform FSCL eval using the trained model",
+    )
+    parser.add_argument(
         "--temperature",
         default=0.07,
         type=float,

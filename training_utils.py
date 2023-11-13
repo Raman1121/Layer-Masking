@@ -668,28 +668,102 @@ def train_one_epoch_fairness_FSCL(
     metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value}"))
     metric_logger.add_meter("img/s", utils.SmoothedValue(window_size=10, fmt="{value}"))
 
-    tol_output, tol_target, tol_sensitive = [], [], []
+    losses = []
+
+    header = f"Epoch: [{epoch}]"
+    # for i, (image, target, sens_attr) in enumerate(
+    #     metric_logger.log_every(data_loader, args.print_freq, header)
+    # ):
+    for i, (image, target, sens_attr) in enumerate(data_loader):
+
+        start_time = time.time()
+
+        images = torch.cat([image[0], image[1]], dim=0)
+        images, target = images.to(device), target.to(device)
+
+        bsz = target.shape[0]
+        
+
+        with torch.cuda.amp.autocast(enabled=scaler is not None):
+
+            features = model(images)
+            f1, f2 = torch.split(features, [bsz, bsz], dim=0)
+            features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
+
+            loss = criterion(features, target, sens_attr, args.group_norm, args.method, epoch)   
+            print("Training Loss {}".format(round(loss.item(), 3)))         
+            losses.append(loss.item())
+
+        optimizer.zero_grad()
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            if args.clip_grad_norm is not None:
+                # we should unscale the gradients of optimizer's assigned params if do gradient clipping
+                scaler.unscale_(optimizer)
+                nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            if args.clip_grad_norm is not None:
+                nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad_norm)
+            optimizer.step()
+
+        if model_ema and i % args.model_ema_steps == 0:
+            model_ema.update_parameters(model)
+            if epoch < args.lr_warmup_epochs:
+                # Reset ema buffer to keep copying weights during warmup period
+                model_ema.n_averaged.fill_(0)
+
+        #metric_logger.update(loss=loss.item(), lr=optimizer.param_groups[0]["lr"])
+    
+    avg_loss = sum(losses) / len(losses) 
+
+    return avg_loss
+
+
+def train_one_epoch_fairness_FSCL_classifier(
+    model,
+    classifier,
+    criterion,
+    ece_criterion,
+    optimizer,
+    data_loader,
+    device,
+    epoch,
+    args,
+    model_ema=None,
+    scaler=None,
+    **kwargs,
+):
+    model.train()
+    metric_logger = utils.MetricLogger(delimiter="  ")
+    metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value}"))
+    metric_logger.add_meter("img/s", utils.SmoothedValue(window_size=10, fmt="{value}"))
+
+    model.eval()
+    classifier.train()
 
     header = f"Epoch: [{epoch}]"
     for i, (image, target, sens_attr) in enumerate(
         metric_logger.log_every(data_loader, args.print_freq, header)
     ):
         start_time = time.time()
+
+        #images = torch.cat([image[0], image[1]], dim=0)
         image, target = image.to(device), target.to(device)
 
         bsz = target.shape[0]
+        
 
         with torch.cuda.amp.autocast(enabled=scaler is not None):
+            
+            with torch.no_grad():
+                features = model.encoder(image)
+            
+            output = classifier(features.detach())
+            loss = torch.mean(criterion(output, target))
 
-            features, output = model(image)
-            print("FEATURES: ", features.shape)
-            f1, f2 = torch.split(features, [bsz, bsz], dim=0)
-            features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
-
-            tol_output += output.tolist()
-            #loss = torch.mean(criterion(output, target))
-
-            loss = criterion(features,target,sens_attr,args.group_norm, args.method, epoch)
             ece_loss = ece_criterion(output, target)
 
         optimizer.zero_grad()
@@ -815,11 +889,29 @@ def train_one_epoch_fairness_FSCL(
             auc, auc_type0, auc_type1 = utils.auc_by_race_binary(
                 output, target, sens_attr, topk=(1,)
             )
+        
+        elif args.sens_attribute == 'age_sex':
+            assert args.dataset == 'chexpert'
+
+            # Accuracy
+            acc1, res_type0, res_type1, res_type2, res_type3 = utils.accuracy_by_age_sex(
+                output, target, sens_attr, topk=(1,)
+            )
+            acc1 = acc1[0]
+            acc_type0 = res_type0[0]
+            acc_type1 = res_type1[0]
+            acc_type2 = res_type2[0]
+            acc_type3 = res_type3[0]
+
+            # AUC
+            auc, auc_type0, auc_type1, auc_type2, auc_type3 = utils.auc_by_age_sex(
+                output, target, sens_attr, topk=(1,)
+            )
             
         else:
             raise NotImplementedError("Sens Attribute not implemented")
 
-        batch_size = image.shape[0]
+        batch_size = target.shape[0]
 
         metric_logger.update(loss=loss.item(), lr=optimizer.param_groups[0]["lr"])
         metric_logger.update(
@@ -1081,6 +1173,56 @@ def train_one_epoch_fairness_FSCL(
             else:
                 metric_logger.meters["auc_Race1"].update(0.0, n=0)
 
+        elif args.sens_attribute == 'age_sex':
+
+            # ACCURACY
+            if acc_type0 is not np.nan:
+                metric_logger.meters["acc_AgeSex0"].update(acc_type0.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_AgeSex0"].update(0.0, n=0)
+
+            if acc_type1 is not np.nan: 
+                metric_logger.meters["acc_AgeSex1"].update(acc_type1.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_AgeSex1"].update(0.0, n=0)
+            
+            if acc_type2 is not np.nan:
+                metric_logger.meters["acc_AgeSex2"].update(acc_type2.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_AgeSex2"].update(0.0, n=0)
+            
+            if acc_type3 is not np.nan:
+                metric_logger.meters["acc_AgeSex3"].update(acc_type3.item(), n=batch_size)
+            else:
+                metric_logger.meters["acc_AgeSex3"].update(0.0, n=0)
+
+
+            # AUC
+            if auc is not np.nan:
+                metric_logger.meters["auc"].update(auc, n=batch_size)
+            else:
+                metric_logger.meters["auc"].update(0.0, n=0)
+
+            if auc_type0 is not np.nan:
+                metric_logger.meters["auc_AgeSex0"].update(auc_type0, n=batch_size)
+            else:
+                metric_logger.meters["auc_AgeSex0"].update(0.0, n=0)
+            
+            if auc_type1 is not np.nan:
+                metric_logger.meters["auc_AgeSex1"].update(auc_type1, n=batch_size)
+            else:
+                metric_logger.meters["auc_AgeSex1"].update(0.0, n=0)
+            
+            if auc_type2 is not np.nan:
+                metric_logger.meters["auc_AgeSex2"].update(auc_type2, n=batch_size)
+            else:
+                metric_logger.meters["auc_AgeSex2"].update(0.0, n=0)
+            
+            if auc_type3 is not np.nan:
+                metric_logger.meters["auc_AgeSex3"].update(auc_type3, n=batch_size)
+            else:
+                metric_logger.meters["auc_AgeSex3"].update(0.0, n=0)
+
         metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
 
 
@@ -1120,6 +1262,12 @@ def train_one_epoch_fairness_FSCL(
             best_auc_avg = max(metric_logger.auc_Race0.global_avg, metric_logger.auc_Race1.global_avg)
             worst_auc_avg = min(metric_logger.auc_Race0.global_avg, metric_logger.auc_Race1.global_avg)
 
+        elif(args.sens_attribute == 'age_sex'):
+            best_acc_avg = max(metric_logger.acc_AgeSex0.global_avg, metric_logger.acc_AgeSex1.global_avg)
+            worst_acc_avg = min(metric_logger.acc_AgeSex0.global_avg, metric_logger.acc_AgeSex1.global_avg)
+            best_auc_avg = max(metric_logger.auc_AgeSex0.global_avg, metric_logger.auc_AgeSex1.global_avg)
+            worst_auc_avg = min(metric_logger.auc_AgeSex0.global_avg, metric_logger.auc_AgeSex1.global_avg)
+            
         acc_avg = metric_logger.acc1.global_avg
         auc_avg = metric_logger.auc.global_avg
 
@@ -3195,6 +3343,14 @@ def load_data(traindir, valdir, testdir, args):
         test_sampler,
     )
 
+class TwoCropTransform:
+    """Create two crops of the same image"""
+    def __init__(self, transform):
+        self.transform = transform
+
+    def __call__(self, x):
+        return [self.transform(x), self.transform(x)]
+
 
 def load_fairness_data(args, df, df_val, df_test):
     print("Loading fairness data")
@@ -3233,6 +3389,9 @@ def load_fairness_data(args, df, df_val, df_test):
             ra_magnitude=ra_magnitude,
             augmix_severity=augmix_severity,
         )
+
+        if(args.fscl):
+            transform = TwoCropTransform(transform)
 
         if args.dataset == "HAM10000":
             dataset = HAM10000.HAM10000Dataset(df, args.sens_attribute, transform, args.age_type, args.label_type)
