@@ -438,13 +438,13 @@ def get_args_parser(add_help=True):
         help="Learning rate for training the classifier in FSCL",
     )
     parser.add_argument(
-        "--fscl_eval",
+        "--fscl_eval_only",
         action='store_true',
         help="To perform FSCL eval using the trained model",
     )
     parser.add_argument(
         "--temperature",
-        default=0.07,
+        default=0.1,
         type=float,
         help="Temperature Parameter in FSCL",
     )
@@ -456,7 +456,7 @@ def get_args_parser(add_help=True):
     )
     parser.add_argument(
         "--base_temperature",
-        default=0.07,
+        default=0.1,
         type=float,
         help="Temperature Parameter in FSCL",
     )

@@ -1310,7 +1310,7 @@ def main(args):
                 print("DPD: ", dpd)
                 print("DPR: ", dpr)
         else:
-            raise NotImplementedError
+            raise NotImplementedError("Sensitive Attribute not supported")
 
         print("Test loss: ", round(torch.mean(test_loss).item(), 3))
         print("Test max loss: ", round(test_max_loss.item(), 3))

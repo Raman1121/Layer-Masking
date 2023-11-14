@@ -107,7 +107,12 @@ class FairSupConLoss(nn.Module):
             mask = torch.eye(batch_size, dtype=torch.float32).to(device)
         elif labels is not None:
             labels = labels.contiguous().view(-1, 1)
-            sensitive_labels = sensitive_labels.contiguous().view(-1, 1)
+
+            try:
+                sensitive_labels = sensitive_labels.contiguous().view(-1, 1)
+            except:
+                import pdb; pdb.set_trace()
+            
             if labels.shape[0] != batch_size:
                 raise ValueError('Num of labels does not match num of features')
             mask = torch.eq(labels, labels.T).float().to(device)

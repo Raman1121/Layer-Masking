@@ -683,6 +683,13 @@ def train_one_epoch_fairness_FSCL(
         images, target = images.to(device), target.to(device)
 
         bsz = target.shape[0]
+
+        if(args.sens_attribute == 'gender'):
+            # Convert the list containing 'M' and 'F' into 0s and 1s
+            # M: 0, F: 1
+
+            sens_attr = [0 if x == 'M' else 1 for x in sens_attr]
+            sens_attr = torch.tensor(sens_attr)
         
 
         with torch.cuda.amp.autocast(enabled=scaler is not None):
@@ -1570,6 +1577,7 @@ def evaluate_fairness_gender(
     args,
     print_freq=100,
     log_suffix="",
+    classifier=None,
     **kwargs,
 ):
     print("EVALUATING")
@@ -1594,7 +1602,13 @@ def evaluate_fairness_gender(
             target = target.to(device, non_blocking=True)
             # sens_attr = sens_attr.to(device, non_blocking=True)
 
-            output = model(image)
+            if(args.fscl):
+                output_from_encoder = model.encoder(image)
+                # print("Output from encoder: ", output_from_encoder.shape)
+                output = classifier(output_from_encoder)
+            else:
+                output = model(image)
+
             pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
             preds = np.argmax(pred_probs, axis=1)
             loss = criterion(output, target)
@@ -1754,6 +1768,7 @@ def evaluate_fairness_skin_type(
     args,
     print_freq=100,
     log_suffix="",
+    classifier=None,
     **kwargs,
 ):
     print("EVALUATING")
@@ -1786,7 +1801,13 @@ def evaluate_fairness_skin_type(
             target = target.to(device, non_blocking=True)
             # sens_attr = sens_attr.to(device, non_blocking=True)
 
-            output = model(image)
+            if(args.fscl):
+                output_from_encoder = model.encoder(image)
+                print("Output from encoder: ", output_from_encoder.shape)
+                output = classifier(output_from_encoder)
+            else:
+                output = model(image)
+
             pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
             preds = np.argmax(pred_probs, axis=1)
             loss = criterion(output, target)
@@ -2056,6 +2077,7 @@ def evaluate_fairness_skin_type_binary(
     args,
     print_freq=100,
     log_suffix="",
+    classifier=None,
     **kwargs,
 ):
 
@@ -2081,7 +2103,13 @@ def evaluate_fairness_skin_type_binary(
             target = target.to(device, non_blocking=True)
             # sens_attr = sens_attr.to(device, non_blocking=True)
 
-            output = model(image)
+            if(args.fscl):
+                output_from_encoder = model.encoder(image)
+                print("Output from encoder: ", output_from_encoder.shape)
+                output = classifier(output_from_encoder)
+            else:
+                output = model(image)
+
             pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
             preds = np.argmax(pred_probs, axis=1)
             loss = criterion(output, target)
@@ -2252,6 +2280,7 @@ def evaluate_fairness_age(
     args,
     print_freq=100,
     log_suffix="",
+    classifier=None,
     **kwargs,
 ):
     print("EVALUATING")
@@ -2282,7 +2311,13 @@ def evaluate_fairness_age(
             target = target.to(device, non_blocking=True)
             # sens_attr = sens_attr.to(device, non_blocking=True)
 
-            output = model(image)
+            if(args.fscl):
+                output_from_encoder = model.encoder(image)
+                print("Output from encoder: ", output_from_encoder.shape)
+                output = classifier(output_from_encoder)
+            else:
+                output = model(image)
+
             pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
             preds = np.argmax(pred_probs, axis=1)
             loss = criterion(output, target)
@@ -2522,6 +2557,7 @@ def evaluate_fairness_age_binary(
     args,
     print_freq=100,
     log_suffix="",
+    classifier=None,
     **kwargs,
 ):
     print("EVALUATING")
@@ -2547,7 +2583,13 @@ def evaluate_fairness_age_binary(
             target = target.to(device, non_blocking=True)
             # sens_attr = sens_attr.to(device, non_blocking=True)
 
-            output = model(image)
+            if(args.fscl):
+                output_from_encoder = model.encoder(image)
+                print("Output from encoder: ", output_from_encoder.shape)
+                output = classifier(output_from_encoder)
+            else:
+                output = model(image)
+
             pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
             preds = np.argmax(pred_probs, axis=1)
             loss = criterion(output, target)
@@ -2720,6 +2762,7 @@ def evaluate_fairness_race_binary(
     args,
     print_freq=100,
     log_suffix="",
+    classifier=None,
     **kwargs,
 ):
     print("EVALUATING")
@@ -2745,7 +2788,13 @@ def evaluate_fairness_race_binary(
             target = target.to(device, non_blocking=True)
             # sens_attr = sens_attr.to(device, non_blocking=True)
 
-            output = model(image)
+            if(args.fscl):
+                output_from_encoder = model.encoder(image)
+                #print("Output from encoder: ", output_from_encoder.shape)
+                output = classifier(output_from_encoder)
+            else:
+                output = model(image)
+
             pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
             preds = np.argmax(pred_probs, axis=1)
             loss = criterion(output, target)
@@ -2919,6 +2968,7 @@ def evaluate_fairness_age_sex(
     args,
     print_freq=100,
     log_suffix="",
+    classifier=None,
     **kwargs,
 ):
     print("EVALUATING")
@@ -2948,7 +2998,13 @@ def evaluate_fairness_age_sex(
             target = target.to(device, non_blocking=True)
             # sens_attr = sens_attr.to(device, non_blocking=True)
 
-            output = model(image)
+            if(args.fscl):
+                output_from_encoder = model.encoder(image)
+                print("Output from encoder: ", output_from_encoder.shape)
+                output = classifier(output_from_encoder)
+            else:
+                output = model(image)
+
             pred_probs = torch.softmax(output, dim=1).cpu().detach().data.numpy()
             preds = np.argmax(pred_probs, axis=1)
             loss = criterion(output, target)
@@ -3465,6 +3521,7 @@ def load_fairness_data(args, df, df_val, df_test):
                 normalize = T.Normalize(mean=mean, std=std)
 
                 transform_eval = T.Compose([
+                                        T.RandomResizedCrop(size=train_crop_size, scale=(0.2, 1.)),
                                         T.ToTensor(),
                                         normalize,
                                     ])
