@@ -20,6 +20,7 @@ import presets
 import torch
 import torch.utils.data
 import torchvision
+import torchvision.transforms as T
 import transforms
 import utils
 from data import HAM10000, fitzpatrick, papila, ol3i, oasis, chexpert, glaucoma
@@ -741,6 +742,7 @@ def train_one_epoch_fairness_FSCL_classifier(
     metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value}"))
     metric_logger.add_meter("img/s", utils.SmoothedValue(window_size=10, fmt="{value}"))
 
+    #Freeze the encoder and train only the classifier
     model.eval()
     classifier.train()
 
@@ -3369,29 +3371,61 @@ def load_fairness_data(args, df, df_val, df_test):
         print(f"Loading dataset_train from {cache_path}")
         dataset, _ = torch.load(cache_path)
     else:
-        # We need a default value for the variables below because args may come
-        # from train_quantization.py which doesn't define them.
-        auto_augment_policy = getattr(args, "auto_augment", None)
-        random_erase_prob = getattr(args, "random_erase", 0.0)
-        ra_magnitude = getattr(args, "ra_magnitude", None)
-        augmix_severity = getattr(args, "augmix_severity", None)
 
-        print("auto_augment_policy: ", auto_augment_policy)
-        print("random_erase_prob: ", random_erase_prob)
-        print("ra_magnitude: ", ra_magnitude)
-        print("augmix_severity: ", augmix_severity)
+        if(args.train_fscl_encoder):
+            mean = (0.5000, 0.5000, 0.5000)
+            std = (0.5000, 0.5000, 0.5000)
+            normalize = T.Normalize(mean=mean, std=std)
 
-        transform = presets.ClassificationPresetTrain(
-            crop_size=train_crop_size,
-            interpolation=interpolation,
-            auto_augment_policy=auto_augment_policy,
-            random_erase_prob=random_erase_prob,
-            ra_magnitude=ra_magnitude,
-            augmix_severity=augmix_severity,
-        )
+            transform = T.Compose([
+                T.RandomResizedCrop(size=train_crop_size, scale=(0.2, 1.)),
+                T.RandomHorizontalFlip(),
+                T.RandomApply([
+                    T.ColorJitter(0.4, 0.4, 0.4, 0.1)
+                ], p=0.8),
+                T.RandomGrayscale(p=0.2),
+                T.ToTensor(),
+                normalize,
+            ])
 
-        if(args.fscl):
             transform = TwoCropTransform(transform)
+
+        elif args.train_fscl_classifier:
+            mean = (0.5000, 0.5000, 0.5000)
+            std = (0.5000, 0.5000, 0.5000)
+        
+            normalize = T.Normalize(mean=mean, std=std)
+
+            transform = T.Compose([
+                T.RandomResizedCrop(size=train_crop_size, scale=(0.2, 1.)),
+                T.RandomHorizontalFlip(),
+                T.ToTensor(),
+                normalize,
+            ])
+
+        else:
+            # We need a default value for the variables below because args may come
+            # from train_quantization.py which doesn't define them.
+            auto_augment_policy = getattr(args, "auto_augment", None)
+            random_erase_prob = getattr(args, "random_erase", 0.0)
+            ra_magnitude = getattr(args, "ra_magnitude", None)
+            augmix_severity = getattr(args, "augmix_severity", None)
+
+            print("auto_augment_policy: ", auto_augment_policy)
+            print("random_erase_prob: ", random_erase_prob)
+            print("ra_magnitude: ", ra_magnitude)
+            print("augmix_severity: ", augmix_severity)
+
+            transform = presets.ClassificationPresetTrain(
+                crop_size=train_crop_size,
+                interpolation=interpolation,
+                auto_augment_policy=auto_augment_policy,
+                random_erase_prob=random_erase_prob,
+                ra_magnitude=ra_magnitude,
+                augmix_severity=augmix_severity,
+            )
+
+        # MAKE TRAINING DATA HERE
 
         if args.dataset == "HAM10000":
             dataset = HAM10000.HAM10000Dataset(df, args.sens_attribute, transform, args.age_type, args.label_type)
@@ -3423,11 +3457,23 @@ def load_fairness_data(args, df, df_val, df_test):
             weights = torchvision.models.get_weight(args.weights)
             transform_eval = weights.transforms()
         else:
-            transform_eval = presets.ClassificationPresetEval(
-                crop_size=val_crop_size,
-                resize_size=val_resize_size,
-                interpolation=interpolation,
-            )
+
+            if(args.train_fscl_classifier):
+                mean = (0.5000, 0.5000, 0.5000)
+                std = (0.5000, 0.5000, 0.5000)
+            
+                normalize = T.Normalize(mean=mean, std=std)
+
+                transform_eval = T.Compose([
+                                        T.ToTensor(),
+                                        normalize,
+                                    ])
+            else:
+                transform_eval = presets.ClassificationPresetEval(
+                    crop_size=val_crop_size,
+                    resize_size=val_resize_size,
+                    interpolation=interpolation,
+                )
         if args.dataset == "HAM10000":
             dataset_val = HAM10000.HAM10000Dataset(df_val, args.sens_attribute, transform_eval, args.age_type, args.label_type)
             dataset_test = HAM10000.HAM10000Dataset(df_test, args.sens_attribute, transform_eval, args.age_type, args.label_type)

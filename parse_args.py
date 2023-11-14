@@ -426,6 +426,18 @@ def get_args_parser(add_help=True):
         help="To perform FSCL",
     )
     parser.add_argument(
+        "--train_encoder_lr",
+        default=0.1,
+        type=float,
+        help="Learning rate for training the encoder in FSCL",
+    )
+    parser.add_argument(
+        "--train_classifier_lr",
+        default=0.1,
+        type=float,
+        help="Learning rate for training the classifier in FSCL",
+    )
+    parser.add_argument(
         "--fscl_eval",
         action='store_true',
         help="To perform FSCL eval using the trained model",

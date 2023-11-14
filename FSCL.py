@@ -252,6 +252,10 @@ def main(args):
     with open("config.yaml") as file:
         yaml_data = yaml.safe_load(file)
 
+    #Enable two crop transform for training the encoder
+    args.train_fscl_encoder = True
+    args.train_fscl_classifier = False
+
     (
         dataset,
         dataset_val,
@@ -448,8 +452,11 @@ def main(args):
         torch.save(model_without_ddp.state_dict(), os.path.join(args.ckpt_dir, "FSCL_model_"+args.tuning_method+".pth"))
 
 
-
     if args.fscl_eval:
+        
+        args.train_fscl_encoder = False
+        args.train_fscl_classifier = True
+
         # Perform evaluation on the test data using the trained classifier 
         print("Performing evaluation on the test data using the trained classifier")
 
@@ -472,29 +479,68 @@ def main(args):
         criterion = criterion.cuda()
         model.load_state_dict(ckpt)
 
+        (
+            dataset,
+            dataset_val,
+            dataset_test,
+            train_sampler,
+            val_sampler,
+            test_sampler,
+        ) = get_fairness_data(args, yaml_data)
+
+        data_loader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=args.batch_size,
+            sampler=train_sampler,
+            num_workers=args.workers,
+            pin_memory=True,
+            collate_fn=collate_fn,
+            drop_last=drop_last
+        )
+        data_loader_val = torch.utils.data.DataLoader(
+            dataset_val,
+            batch_size=args.batch_size,
+            sampler=val_sampler,
+            num_workers=args.workers,
+            pin_memory=True,
+            #drop_last=True
+        )
+        data_loader_test = torch.utils.data.DataLoader(
+            dataset_test,
+            batch_size=args.batch_size,
+            sampler=test_sampler,
+            num_workers=args.workers,
+            pin_memory=True,
+            drop_last=False
+        )
+
         classifier = nn.Linear(dim_dict[args.model], args.num_classes)
         classifier = classifier.cuda()
 
-        (
-            train_acc,
-            train_best_acc,
-            train_worst_acc,
-            train_auc,
-            train_best_auc,
-            train_worst_auc,
-        ) = train_one_epoch_fairness_FSCL_classifier(
-            model,
-            classifier,
-            criterion,
-            ece_criterion,
-            optimizer,
-            data_loader_val,
-            device,
-            epoch,
-            args,
-            model_ema,
-            scaler,
-            )
+        for epoch in range(args.start_epoch, args.epochs):
+            
+            print("\n")
+            print("EPOCH {} / {}".format(epoch, args.epochs - 1))
+            (
+                train_acc,
+                train_best_acc,
+                train_worst_acc,
+                train_auc,
+                train_best_auc,
+                train_worst_auc,
+            ) = train_one_epoch_fairness_FSCL_classifier(
+                model,
+                classifier,
+                criterion,
+                ece_criterion,
+                optimizer,
+                data_loader,
+                device,
+                epoch,
+                args,
+                model_ema,
+                scaler,
+                )
 
 
 if __name__ == "__main__":
