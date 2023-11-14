@@ -366,7 +366,7 @@ def main(args):
     
     print("Loading State Dict into the model")
     model = model.cuda()
-    criterion = criterion.cuda()
+    # criterion = criterion.cuda()
     model.load_state_dict(ckpt)
 
     (

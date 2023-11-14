@@ -52,20 +52,7 @@ def create_results_df(args):
         elif(args.use_metric == 'auc'):
             if(args.cal_equiodds):
                 test_results_df = pd.DataFrame(
-                        columns=[
-                            "Tuning Method",
-                            "Train Percent",
-                            "LR",
-                            "Test AUC Overall",
-                            "Test AUC Male",
-                            "Test AUC Female",
-                            "Test AUC Difference",
-                            "Mask Path",
-                            "EquiOdd_diff", 
-                            "EquiOdd_ratio", 
-                            "DPD", 
-                            "DPR", 
-                        ]
+                        columns=["Tuning Method", "Train Percent", "LR", "Test AUC Overall", "Test AUC Male", "Test AUC Female", "Test AUC Difference", "Mask Path", "EquiOdd_diff",  "EquiOdd_ratio",  "DPD",  "DPR"]
                     )
             else:
                 test_results_df = pd.DataFrame(
@@ -1471,5 +1458,8 @@ if __name__ == "__main__":
 
     current_wd = os.getcwd()
     args.fig_savepath = os.path.join(args.output_dir, "plots/")
+
+    args.train_fscl_classifier = False
+    args.train_fscl_encoder = False
 
     main(args)
